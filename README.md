@@ -181,6 +181,10 @@ For a tutorial on using SAEs using the Biohub Platform, see [here](https://githu
 ## ESMFold2
 <a name="esmfold2"></a>
 
+[EnsembleFold-compatible ESMFold2 wrapper](ESMFOLD2_WRAPPER.md) documents the
+versioned JSON input, Boltz-style paired/unpaired MSA adapter, staged CLI, and
+seed/sample output layout added for local batch prediction.
+
 
 [ESMFold2](https://huggingface.co/biohub/ESMFold2) is a state-of-the-art protein structure prediction model that combines ESMC (6B parameter) language model embeddings with a diffusion-based structure prediction architecture.
 

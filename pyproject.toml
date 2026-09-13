@@ -39,6 +39,7 @@ dependencies = [
   "httpx",
   "tenacity",
   "zstd",
+  "zstandard",
   "ipywidgets",
   "py3dmol",
   "pydssp",
@@ -51,9 +52,10 @@ dependencies = [
   "pygtrie",
   "dna_features_viewer",
   "accelerate",
-  "cuequivariance-torch>=0.8.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
-  "cuequivariance-ops-torch-cu13>=0.8.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+
+[project.scripts]
+esmfold2-wrapper = "esm.esmfold2_wrapper.cli:main"
 
 [project.optional-dependencies]
 # ESMFold2 "fused" kernel backend (set_kernel_backend("fused"))

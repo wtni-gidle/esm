@@ -814,6 +814,15 @@ def test_decode_returns_one_result_for_one_sample_and_a_list_for_more(
     )
 
 
+def test_decode_preserves_native_pde(input_builder, folded_complex):
+    output, features, chain_infos = folded_complex
+
+    result = input_builder.decode(output, features, chain_infos)
+
+    assert result.pde is not None
+    assert torch.equal(result.pde, output["pde"][0].cpu())
+
+
 def test_decode_keeps_every_chain_and_round_trips_through_mmcif(
     input_builder, folded_complex
 ):
