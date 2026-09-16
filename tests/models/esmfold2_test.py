@@ -542,6 +542,67 @@ def test_widths_no_hook_can_see_are_pinned_too(tiny_esmfold2, tiny_esmfold2_conf
     )
 
 
+def test_confidence_head_processes_samples_sequentially_and_preserves_order(
+    tiny_esmfold2, tiny_esmfold2_config
+):
+    """Confidence must not materialise the full B*S pair grid at once.
+
+    The expected result is computed one ``(batch, sample)`` item at a time, then
+    concatenated in the same flattened order as ``repeat_interleave``. Besides
+    pinning every confidence output, the trunk hook makes the memory contract
+    observable: a three-sample, two-complex input must enter the L² trunk as
+    three batch-two calls rather than one batch-six call.
+    """
+    head = tiny_esmfold2.confidence_head
+    config = tiny_esmfold2_config
+    batch_size, num_samples, n_tokens, n_atoms = 2, 3, 4, 8
+    torch.manual_seed(17)
+
+    inputs = {
+        "s_inputs": torch.randn(batch_size, n_tokens, config.single_inputs_size),
+        "z": torch.randn(batch_size, n_tokens, n_tokens, config.pairwise_hidden_size),
+        "x_pred": torch.randn(batch_size, num_samples, n_atoms, 3),
+        "distogram_atom_idx": torch.tensor([[0, 2, 4, 6]]).expand(batch_size, -1),
+        "token_attention_mask": torch.ones(batch_size, n_tokens),
+        "atom_to_token": torch.tensor([[0, 0, 1, 1, 2, 2, 3, 3]]).expand(
+            batch_size, -1
+        ),
+        "atom_attention_mask": torch.ones(batch_size, n_atoms),
+        "asym_id": torch.tensor([[0, 0, 1, 1]]).expand(batch_size, -1),
+        "mol_type": torch.zeros(batch_size, n_tokens, dtype=torch.long),
+    }
+
+    expected_parts = []
+    with torch.no_grad():
+        for batch_idx in range(batch_size):
+            for sample_idx in range(num_samples):
+                item = {
+                    key: value[batch_idx : batch_idx + 1]
+                    for key, value in inputs.items()
+                    if key != "x_pred"
+                }
+                item["x_pred"] = inputs["x_pred"][batch_idx : batch_idx + 1, sample_idx]
+                expected_parts.append(head(**item, num_diffusion_samples=1))
+
+    trunk_batch_sizes = []
+
+    def record_trunk_batch(_module, args):
+        trunk_batch_sizes.append(args[0].shape[0])
+
+    handle = head.folding_trunk.register_forward_pre_hook(record_trunk_batch)
+    try:
+        with torch.no_grad():
+            actual = head(**inputs, num_diffusion_samples=num_samples)
+    finally:
+        handle.remove()
+
+    assert trunk_batch_sizes == [batch_size] * num_samples
+    assert actual.keys() == expected_parts[0].keys()
+    for key in actual:
+        expected = torch.cat([part[key] for part in expected_parts], dim=0)
+        torch.testing.assert_close(actual[key], expected, atol=1e-5, rtol=1e-5)
+
+
 # ---------------------------------------------------------------------------
 # The atom axis and its 32-wide padding
 # ---------------------------------------------------------------------------

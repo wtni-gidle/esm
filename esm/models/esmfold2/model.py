@@ -205,12 +205,68 @@ class ConfidenceHead(nn.Module):
             * self.s_to_z_prod_in2(s_inputs_normed)[:, None, :, :]
         )
 
-        pair = self._repeat_batch(z_base, num_diffusion_samples)
-        x_pred_flat = self._flatten_sample_axis(x_pred)
-        rep_idx_m = self._repeat_batch(distogram_atom_idx, num_diffusion_samples).long()
-        mask = self._repeat_batch(token_attention_mask, num_diffusion_samples)
+        batch_size = z_base.shape[0]
+        if x_pred.ndim == 3:
+            x_pred_samples = x_pred.reshape(
+                batch_size, num_diffusion_samples, *x_pred.shape[1:]
+            )
+        elif x_pred.ndim == 4:
+            x_pred_samples = x_pred
+        else:
+            raise ValueError(
+                "x_pred must have shape [B*S, A, 3] or [B, S, A, 3], "
+                f"received {tuple(x_pred.shape)}"
+            )
+        if x_pred_samples.shape[:2] != (batch_size, num_diffusion_samples):
+            raise ValueError(
+                "x_pred batch/sample axes do not match the confidence inputs: "
+                f"expected {(batch_size, num_diffusion_samples)}, "
+                f"received {tuple(x_pred_samples.shape[:2])}"
+            )
 
-        rep_coords = gather_rep_atom_coords(x_pred_flat, rep_idx_m)
+        # The sample axis has no cross-sample interactions in the confidence
+        # head. Running it serially avoids materialising B*S copies of every
+        # LxL pair tensor while preserving the original flattened B-major,
+        # sample-minor output order expected by the decoder.
+        sample_outputs = [
+            self._forward_sample_batch(
+                z_base=z_base,
+                x_pred=x_pred_samples[:, sample_idx],
+                distogram_atom_idx=distogram_atom_idx,
+                token_attention_mask=token_attention_mask,
+                atom_to_token=atom_to_token,
+                atom_attention_mask=atom_attention_mask,
+                asym_id=asym_id,
+                mol_type=mol_type,
+            )
+            for sample_idx in range(num_diffusion_samples)
+        ]
+        return {
+            key: torch.stack([output[key] for output in sample_outputs], dim=1).flatten(
+                0, 1
+            )
+            for key in sample_outputs[0]
+        }
+
+    def _forward_sample_batch(
+        self,
+        *,
+        z_base: Tensor,
+        x_pred: Tensor,
+        distogram_atom_idx: Tensor,
+        token_attention_mask: Tensor,
+        atom_to_token: Tensor,
+        atom_attention_mask: Tensor,
+        asym_id: Tensor,
+        mol_type: Tensor,
+    ) -> dict[str, Tensor]:
+        """Run confidence for one diffusion sample across the input batch."""
+
+        pair = z_base
+        rep_idx_m = distogram_atom_idx.long()
+        mask = token_attention_mask
+
+        rep_coords = gather_rep_atom_coords(x_pred, rep_idx_m)
         rep_distances = torch.cdist(
             rep_coords, rep_coords, compute_mode="donot_use_mm_for_euclid_dist"
         )
@@ -243,7 +299,7 @@ class ConfidenceHead(nn.Module):
             atom_attention_mask=atom_attention_mask,
             asym_id=asym_id,
             mol_type=mol_type,
-            num_diffusion_samples=num_diffusion_samples,
+            num_diffusion_samples=1,
         )
 
     def _finish(
