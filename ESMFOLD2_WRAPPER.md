@@ -231,7 +231,7 @@ Sample indices are zero-based and retain native diffusion order; samples are not
 ranked or renamed:
 
 ```text
-results/target/predictions/
+results/target/
 ├── models/
 │   └── seed-101_sample-0_model.cif
 ├── summary_confidences/

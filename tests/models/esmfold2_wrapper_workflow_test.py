@@ -39,8 +39,26 @@ def test_data_stage_targets_canonical_prepared_manifest(tmp_path):
 
     expected = (tmp_path / "outputs/target/target_data.json").resolve()
     assert plan.prepared_path == expected
-    assert plan.predictions_dir == (tmp_path / "outputs/target/predictions").resolve()
+    assert plan.predictions_dir == (tmp_path / "outputs/target").resolve()
     assert not plan.job_dir.exists()
+
+
+def test_outputs_use_job_root(tmp_path):
+    source = tmp_path / "input.json"
+    write_input(source)
+
+    plan = build_workflow_plan(
+        source,
+        tmp_path / "results",
+        run_data_pipeline=False,
+        run_inference=True,
+    )
+
+    job = (tmp_path / "results/target").resolve()
+    assert plan.predictions_dir == job
+    sample = expected_seed_samples(job, seed=7, sample_count=1)[0]
+    assert sample.model_path == job / "models/seed-7_sample-0_model.cif"
+    assert not job.exists()
 
 
 def test_inference_only_consumes_the_given_prepared_manifest(tmp_path):
@@ -197,7 +215,7 @@ def test_workflow_loads_once_for_many_seeds_and_reruns_only_incomplete(
     assert skipped.prediction_paths == first.prediction_paths
 
     expected_seed_samples(
-        output_dir / "target/predictions", seed=9, sample_count=2
+        output_dir / "target", seed=9, sample_count=2
     )[1].pde_path.unlink()
     rerun_folds = []
 
