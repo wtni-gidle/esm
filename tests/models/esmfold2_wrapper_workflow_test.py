@@ -1,6 +1,7 @@
 """Tests for side-effect-free ESMFold2 wrapper planning."""
 
 import json
+import os
 from types import SimpleNamespace
 
 import numpy as np
@@ -322,3 +323,73 @@ def test_combined_workflow_covers_bundle_adapter_and_publication(
     assert len(load_calls) == 1
     assert fold_calls == [11, 13]
     assert all(path.is_file() for path in result.prediction_paths)
+
+
+def test_separate_stages_survive_manifest_rename_and_cwd_change(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "input" / "request.json"
+    source.parent.mkdir()
+    source.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "name": "portable_target",
+                "sequences": [
+                    {
+                        "type": "protein",
+                        "id": "A",
+                        "sequence": "ACDE",
+                        "msa": ">q\nACDE\n",
+                    }
+                ],
+            }
+        )
+    )
+    source_bytes = source.read_bytes()
+    data_result = run_prepared_workflow(
+        source,
+        tmp_path / "prepared",
+        run_data_pipeline=True,
+        run_inference=False,
+    )
+    renamed = data_result.prepared_path.with_name("renamed.json")
+    data_result.prepared_path.rename(renamed)
+    other_cwd = tmp_path / "elsewhere"
+    other_cwd.mkdir()
+    model = SimpleNamespace(
+        config=SimpleNamespace(msa_encoder=SimpleNamespace(enabled=True)),
+        msa_encoder=object(),
+    )
+
+    class Builder:
+        def fold(self, loaded_model, structure_input, **kwargs):
+            assert loaded_model is model
+            assert structure_input.sequences[0].msa.headers == ["q"]
+            return [fake_result(kwargs["seed"], 0)]
+
+    monkeypatch.setattr(inference_module, "load_esmfold2_model", lambda *a, **k: model)
+    monkeypatch.setattr(inference_module, "_new_input_builder", Builder)
+    previous_cwd = os.getcwd()
+    try:
+        os.chdir(other_cwd)
+        inferred = run_prepared_workflow(
+            renamed,
+            tmp_path / "predictions",
+            run_data_pipeline=False,
+            run_inference=True,
+            seeds=7,
+            num_diffusion_samples=1,
+        )
+    finally:
+        os.chdir(previous_cwd)
+
+    assert inferred.prepared_path == renamed.resolve()
+    assert inferred.prediction_paths == (
+        (
+            tmp_path
+            / "predictions/portable_target/models/seed-7_sample-0_model.cif"
+        ).resolve(),
+    )
+    assert json.loads(renamed.read_text())["name"] == "portable_target"
+    assert source.read_bytes() == source_bytes
