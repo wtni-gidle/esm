@@ -145,12 +145,12 @@ def test_non_embedding_rerun_leaves_optional_embedding_untouched(tmp_path):
     )
 
 
-def test_skip_checks_existence_without_parsing_outputs(tmp_path):
+def test_skip_checks_nonempty_files_without_parsing_outputs(tmp_path):
     published = publish_inference_results(
         [fake_result(0)], predictions_dir=tmp_path, seed=3
     )
     published[0].summary_path.write_text("not json")
-    published[0].model_path.write_text("")
+    published[0].model_path.write_text("not cif")
     published[0].pae_path.write_text("not npz")
 
     assert seed_outputs_complete(tmp_path, seed=3, sample_count=1)
@@ -158,6 +158,37 @@ def test_skip_checks_existence_without_parsing_outputs(tmp_path):
     publish_inference_results([fake_result(0)], predictions_dir=tmp_path, seed=3)
     published[0].pde_path.unlink()
     assert not seed_outputs_complete(tmp_path, seed=3, sample_count=1)
+
+
+@pytest.mark.parametrize("artifact", ["model", "summary", "plddt", "pae", "pde", "embeddings"])
+@pytest.mark.parametrize("state", ["empty", "missing", "directory"])
+def test_skip_requires_each_requested_artifact_to_be_a_nonempty_file(
+    tmp_path, artifact, state
+):
+    paths = {}
+    for seed in (7, 9):
+        for sample in range(2):
+            prefix = f"seed-{seed}_sample-{sample}"
+            paths.update({
+                (seed, sample, "model"): tmp_path / "models" / f"{prefix}_model.cif",
+                (seed, sample, "summary"): tmp_path / "summary_confidences" / f"{prefix}_summary_confidences.json",
+                **{(seed, sample, name): tmp_path / "full_data" / f"{name}_{prefix}.npz" for name in ("plddt", "pae", "pde")},
+            })
+        paths[seed, 1, "embeddings"] = tmp_path / "embeddings" / f"seed-{seed}_embeddings.npz"
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"nonempty garbage accepted without parsing")
+    assert seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True)
+    damaged = paths[9, 1, artifact]
+    damaged.unlink()
+    if state == "empty":
+        damaged.touch()
+    elif state == "directory":
+        damaged.mkdir()
+    assert seed_outputs_complete(tmp_path, seed=7, sample_count=2, include_embeddings=True)
+    assert not seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True)
+    if artifact == "embeddings":
+        assert seed_outputs_complete(tmp_path, seed=9, sample_count=2)
 
 
 def test_all_results_validate_before_existing_seed_is_replaced(tmp_path):

@@ -1,4 +1,4 @@
-"""Side-effect-free planning for the staged ESMFold2 wrapper workflow."""
+"""Lightweight input preparation and ESMFold2 inference with optional snapshots."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class WorkflowPlan:
-    """Resolved paths and selected stages for one wrapper invocation."""
+    """Resolved paths and snapshot policy for one prediction invocation."""
 
     input_path: Path
     output_dir: Path
@@ -30,6 +30,7 @@ class WorkflowPlan:
     predictions_dir: Path
     run_data_pipeline: bool
     run_inference: bool
+    write_input_json: bool
     prepared_input: PreparedInput
 
 
@@ -78,23 +79,24 @@ def build_workflow_plan(
     input_path: str | Path,
     output_dir: str | Path,
     *,
-    run_data_pipeline: bool,
-    run_inference: bool,
+    run_data_pipeline: bool = True,
+    run_inference: bool = True,
+    write_input_json: bool = False,
     validate_resources: bool = True,
 ) -> WorkflowPlan:
     """Validate an invocation without creating directories or loading weights."""
+    if type(write_input_json) is not bool:
+        raise ValueError("write_input_json must be a boolean")
     if type(run_data_pipeline) is not bool or type(run_inference) is not bool:
         raise ValueError("run_data_pipeline and run_inference must be booleans")
     if not run_data_pipeline and not run_inference:
-        raise ValueError(
-            "At least one of run_data_pipeline or run_inference must be true."
-        )
+        raise ValueError("At least one of run_data_pipeline or run_inference must be true.")
 
     source = Path(input_path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"Input path does not exist or is not a file: {source}")
     if source.suffix.lower() != ".json":
-        raise PreparedInputError("The wrapper expects a JSON input for every stage.")
+        raise PreparedInputError("The wrapper expects a JSON input.")
 
     output_root = Path(output_dir).expanduser().resolve()
     prepared = load_prepared_input(source)
@@ -103,7 +105,7 @@ def build_workflow_plan(
     job_dir = output_root / prepared.name
     manifest = (
         prepared_input_path(output_root, prepared.name)
-        if run_data_pipeline
+        if write_input_json
         else source
     )
     return WorkflowPlan(
@@ -115,6 +117,7 @@ def build_workflow_plan(
         predictions_dir=job_dir,
         run_data_pipeline=run_data_pipeline,
         run_inference=run_inference,
+        write_input_json=write_input_json,
         prepared_input=prepared,
     )
 
@@ -123,8 +126,9 @@ def run_prepared_workflow(
     input_path: str | Path,
     output_dir: str | Path,
     *,
-    run_data_pipeline: bool,
-    run_inference: bool,
+    run_data_pipeline: bool = True,
+    run_inference: bool = True,
+    write_input_json: bool = False,
     seeds: str | int | Sequence[int] | None = None,
     skip: bool = False,
     checkpoint: str | Path = "biohub/ESMFold2",
@@ -142,7 +146,7 @@ def run_prepared_workflow(
     msa_column_mask_rate: float = 0.1,
     include_embeddings: bool = False,
 ) -> WorkflowResult:
-    """Prepare data and/or run ordered model seeds with resumable outputs."""
+    """Validate existing input and/or predict, independently controlling writes."""
     if type(skip) is not bool:
         raise ValueError("skip must be a boolean")
     if type(include_embeddings) is not bool:
@@ -152,9 +156,10 @@ def run_prepared_workflow(
         output_dir,
         run_data_pipeline=run_data_pipeline,
         run_inference=run_inference,
+        write_input_json=write_input_json,
     )
     normalized_seeds: tuple[int, ...] = ()
-    if run_inference:
+    if plan.run_inference:
         from esm.esmfold2_wrapper.inference import (
             _validate_fold_options,
             _validate_model_options,
@@ -178,18 +183,18 @@ def run_prepared_workflow(
         )
 
     manifest_path = plan.input_path
-    if run_data_pipeline:
+    if plan.write_input_json:
         from esm.esmfold2_wrapper.data import prepare_data_bundle
 
         prepare_data_bundle(plan.input_path, plan.prepared_path)
         manifest_path = plan.prepared_path
+    elif plan.run_data_pipeline:
+        from esm.esmfold2_wrapper.data import validate_data_input
 
-    if not run_inference:
-        return WorkflowResult(
-            prepared_path=manifest_path,
-            seeds=(),
-            prediction_paths=(),
-        )
+        validate_data_input(plan.input_path)
+
+    if not plan.run_inference:
+        return WorkflowResult(prepared_path=manifest_path, seeds=(), prediction_paths=())
 
     from esm.esmfold2_wrapper.inference import (
         _new_input_builder,

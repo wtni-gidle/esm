@@ -10,8 +10,9 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -d  Single visible CUDA device ID. (default: 0)"
-    echo "  -D  Run data pipeline: true/false. (default: true)"
+    echo "  -D  Validate/organize existing inputs, no search: true/false. (default: true)"
     echo "  -P  Run inference: true/false. (default: true)"
+    echo "  -J  Write/update input JSON and MSA snapshot: true/false. (default: false)"
     echo "  -r  One seed or comma-separated seeds."
     echo "  -n  Diffusion samples per seed. (default: 5)"
     echo "  -c  ESMFold2 folding loops. (default: 20)"
@@ -23,8 +24,8 @@ usage() {
     echo "  -h  Show this help."
     echo ""
     echo "Examples:"
-    echo "  $0 -i target.json -o results -D true -P false"
-    echo "  $0 -i results/target/target_data.json -o results -D false -P true -r 1,2,3 -S true"
+    echo "  $0 -i target.json -o results -D true -P false -J true"
+    echo "  $0 -i results/target/target_data.json -o results -D false -P true -J false -r 1,2,3 -S true"
 }
 
 normalize_boolean() {
@@ -40,13 +41,14 @@ normalize_boolean() {
     esac
 }
 
-while getopts "i:o:d:D:P:r:n:c:p:k:m:E:S:h" option; do
+while getopts "i:o:d:D:P:J:r:n:c:p:k:m:E:S:h" option; do
     case "$option" in
         i) input_path=$OPTARG ;;
         o) output_dir=$OPTARG ;;
         d) gpu_device=$OPTARG ;;
         D) run_data_pipeline=$OPTARG ;;
         P) run_inference=$OPTARG ;;
+        J) write_input_json=$OPTARG ;;
         r) model_seeds=$OPTARG ;;
         n) diffusion_samples=$OPTARG ;;
         c) loops=$OPTARG ;;
@@ -69,6 +71,7 @@ if [[ ! -f "$input_path" ]]; then
     exit 2
 fi
 
+write_input_json=${write_input_json:-false}
 run_data_pipeline=${run_data_pipeline:-true}
 run_inference=${run_inference:-true}
 gpu_device=${gpu_device:-${CUDA_VISIBLE_DEVICES:-0}}
@@ -79,6 +82,7 @@ checkpoint=${checkpoint:-biohub/ESMFold2}
 include_embeddings=${include_embeddings:-false}
 skip=${skip:-false}
 
+write_input_json=$(normalize_boolean -J "$write_input_json")
 run_data_pipeline=$(normalize_boolean -D "$run_data_pipeline")
 run_inference=$(normalize_boolean -P "$run_inference")
 include_embeddings=$(normalize_boolean -E "$include_embeddings")
@@ -98,6 +102,7 @@ command_args=(
     -m esm.esmfold2_wrapper predict
     --input "$input_path"
     --output-dir "$output_dir"
+    --write-input-json "$write_input_json"
     --run-data-pipeline "$run_data_pipeline"
     --run-inference "$run_inference"
     --diffusion-samples "$diffusion_samples"
@@ -116,6 +121,5 @@ fi
 if [[ "$run_inference" == "true" ]]; then
     command_args+=(--device cuda)
 fi
-
 echo "$python_bin ${command_args[*]}"
 "$python_bin" "${command_args[@]}"

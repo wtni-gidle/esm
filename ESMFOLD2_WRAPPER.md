@@ -1,8 +1,8 @@
 # EnsembleFold-compatible ESMFold2 wrapper
 
-This first-layer wrapper gives ESMFold2 the same staged prepared-input and
-seed/sample output workflow used by the EnsembleFold Boltz, Chai-1, Protenix,
-and OpenFold3 integrations.
+This first-layer wrapper gives ESMFold2 inspectable JSON/MSA input and the
+EnsembleFold seed/sample output layout. Its lightweight data pipeline validates
+and organizes existing inputs; optional snapshot publication is separate from inference.
 
 The wrapper does **not** run an MSA search. A protein with no MSA fields is
 folded in query-only mode. To use MSA conditioning, provide either a native A3M
@@ -94,6 +94,8 @@ the JSON file.
 
 Native ESMFold2 pairing keys can appear in A3M headers as `key=N`. Valid values
 are `-1` for an unpaired row or a non-negative paired-row key.
+Writing an input snapshot preserves these headers and keys; it never splits a
+native MSA into paired and unpaired files.
 
 ### Paired plus unpaired MSA mode
 
@@ -125,45 +127,66 @@ the Boltz wrapper. Conversion to ESMFold2's keyed MSA follows these rules:
 Lowercase A3M insertions are removed from aligned sequences while their deletion
 features are retained by the native ESMFold2 MSA parser.
 
-## Staged workflow
+Within one complex, all proteins carrying MSA input must use the same mode:
+native or paired/unpaired. Mixing modes across chains raises an error listing
+the chain IDs. Query-only proteins and non-protein entities do not choose a mode.
+Split snapshots retain the supplied A3M records, including all-gap padding rows;
+the row-number keys are generated only in memory for inference.
 
-The default runs both stages. `-D` controls data preparation and `-P` controls
-model inference; both require an explicit `true` or `false` value.
+## Data pipeline, inference, and optional input snapshot
 
-Prepare only:
+`-D/--run-data-pipeline` and `-P/--run-inference` select the stages; both default
+to true. `-J/--write-input-json` (also `--write_input_json` in the Python CLI)
+independently controls snapshot publication and defaults to **false**.
+At least one stage must be enabled.
+
+The data stage reads and validates supplied JSON/MSAs, including query matches
+and cross-chain paired depths. It neither searches nor builds model features.
+With J=false it validates without writing public files. To save input without
+loading a model or running inference:
+
+```bash
+./run_esmfold2.sh -i target.json -o results -D true -P false -J true
+```
+
+Predict and save a portable copy of the supplied conditions:
 
 ```bash
 ./run_esmfold2.sh \
   -i target.json \
   -o results \
-  -D true \
-  -P false
+  -J true \
+  -r 101
 ```
 
-This validates the JSON and A3Ms and writes a portable prepared bundle:
+In addition to predictions, this validates and writes a portable input snapshot:
 
 ```text
 results/target/
 ├── target_data.json
 └── msas/
-    ├── target__A_paired.a3m.zst
-    └── target__A_unpaired.a3m.zst
+    ├── target__A_pairedmsa.a3m.zst
+    └── target__A_unpairedmsa.a3m.zst
 ```
 
-The prepared MSA filenames are fixed and contain no digest. Re-running the data
-stage atomically replaces each file and publishes `target_data.json` last.
-Data-only execution does not import Torch or load model/CCD resources.
-If rewriting an existing fixed-name bundle is interrupted, rerun the data stage
-before starting inference; the bundle does not provide a cross-file transaction.
+Native input instead produces `msas/target__A_msa.a3m.zst`. The JSON uses paths
+relative to itself, even when the supplied paths were absolute or external.
+Files are updated even if a previous snapshot exists or every seed is skipped.
+No MSA search, native-to-split conversion, or feature cache is involved.
+Arbitrary old input filenames remain readable; these names only govern new output.
+Snapshot files are individually atomically replaced, with JSON published last;
+this is not a cross-file transaction. If a write is interrupted, refresh the
+snapshot from the original input before using it. Do not run concurrent writers
+against the same job snapshot.
 
-Run inference only, using several seeds and five diffusion samples per seed:
+Predict from that snapshot without rewriting it:
 
 ```bash
 ./run_esmfold2.sh \
   -i results/target/target_data.json \
   -o results \
-  -D false \
-  -P true \
+  -D false -P true \
+  -J false \
   -r 101,102,103 \
   -n 5 \
   -S true
@@ -178,20 +201,18 @@ export ESMCFOLD_CCD_PATH=/path/to/ESMFold2/ccd.pkl
 ./run_esmfold2.sh \
   -i results/target/target_data.json \
   -o results \
-  -D false \
-  -P true \
+  -J false \
   -k /path/to/ESMFold2 \
   -m /path/to/ESMC-6B
 ```
 
-Run both stages with the installed CLI:
+The installed CLI has the same behavior:
 
 ```bash
 esmfold2-wrapper predict \
   -i target.json \
   -o results \
-  -D true \
-  -P true \
+  --write-input-json true \
   -r 101 \
   -n 5
 ```
@@ -199,11 +220,21 @@ esmfold2-wrapper predict \
 If no seed is supplied for inference, the wrapper generates and reports one
 concrete uint32 seed. Multiple seeds retain their requested order. The model and
 input builder are loaded once per invocation and reused across pending seeds.
+Every invocation with pending seeds reads its selected JSON and current MSA
+resources afresh, then builds native features during inference. `-J false` does
+not create or rewrite public JSON/MSA resources, even if old ones exist under the
+output root. It still writes prediction results.
+Explicit J=true also works during inference-only (D=false/P=true): it validates
+and materializes the supplied resources but never starts a search. Data-only
+returns no model results and ignores inference-specific seed/sampling options.
 
 ## Core inference options
 
 | Option | Default | Meaning |
 | --- | ---: | --- |
+| `-D, --run-data-pipeline` | `true` | Read/validate/organize existing input, without searching |
+| `-P, --run-inference` | `true` | Run prediction for pending seeds |
+| `-J, --write-input-json` | `false` | Write/update portable input JSON and MSA resources |
 | `-r, --seeds` | generated | One uint32 seed or comma-separated seeds |
 | `-n, --diffusion-samples` | `5` | Samples per seed |
 | `-c, --loops` | `20` | ESMFold2 folding loops |
@@ -218,7 +249,7 @@ input builder are loaded once per invocation and reused across pending seeds.
 | `--msa-max-depth` | `1024` | Maximum MSA depth |
 | `--msa-column-mask-rate` | `0.1` | Fraction of MSA columns masked at inference |
 | `-E, --include-embeddings` | `false` | Write seed-level pooled pair embeddings |
-| `-S, --skip` | `false` | Skip seeds whose canonical files exist |
+| `-S, --skip` | `false` | Skip seeds whose required canonical files exist and are nonempty |
 
 `--dtype auto` is recommended: it preserves checkpoint precision while the CUDA
 forward path uses its native autocast behavior. FP8 ESMC requires compatible
@@ -265,16 +296,17 @@ last; there is no cross-file transaction or rollback.
 ## Skip behavior
 
 With `--skip true`, a seed is skipped only when every requested sample has its
-canonical model, summary, pLDDT, PAE, and PDE file. When embeddings are requested,
-the seed-level embedding file must also exist. The check only uses file
-existence, matching the lightweight AlphaFold3-style resume behavior; it does not
-parse or inspect file contents. If any required path is missing, the whole seed
-is rerun.
+canonical model, summary, pLDDT, PAE, and PDE file as a nonempty regular file.
+When embeddings are requested, the seed-level embedding file must also be
+nonempty. The check only uses file metadata; it does not read or parse contents.
+If any required file is missing or empty, the whole seed is rerun with all
+requested samples. Complete seeds are preserved.
 
 Skip does not compare the prepared input, MSA, checkpoint, loop count, sampling
-steps, dropout, or other inference settings. Use a new output root or disable
-skip after changing experimental conditions. Existing optional embeddings and
-extra sample indices are left untouched and ignored when they are not requested.
+steps, dropout, or other inference settings. Changed conditions can still skip;
+use a new output root or disable skip when new predictions are wanted. Existing
+optional embeddings and extra sample indices are left untouched and ignored
+when they are not requested.
 
 ## Current first-layer scope
 

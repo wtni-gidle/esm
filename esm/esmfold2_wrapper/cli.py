@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     predict = subparsers.add_parser(
         "predict",
-        help="Prepare an input bundle and/or run local ESMFold2 inference.",
+        help="Validate existing input and/or run ESMFold2, optionally saving input.",
         description=(
             "Run the EnsembleFold-compatible ESMFold2 wrapper. This wrapper "
             "does not search for MSAs; omit MSA fields for query-only inference "
@@ -47,10 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     predict.add_argument("-i", "--input", type=Path, required=True)
     predict.add_argument("-o", "--output-dir", type=Path, required=True)
     predict.add_argument(
-        "-D", "--run-data-pipeline", type=_boolean, default=True, metavar="BOOL"
+        "-D", "--run-data-pipeline", type=_boolean, default=True, metavar="BOOL",
+        help="Validate and organize existing inputs; no MSA search (default: true).",
     )
     predict.add_argument(
         "-P", "--run-inference", type=_boolean, default=True, metavar="BOOL"
+    )
+    predict.add_argument(
+        "-J", "--write-input-json", "--write_input_json",
+        type=_boolean, default=False, metavar="BOOL",
+        help="Write/update portable <name>_data.json and MSA resources (default: false).",
     )
     predict.add_argument(
         "-r", "--seeds", "--model-seeds", help="One uint32 seed or comma list."
@@ -99,6 +105,7 @@ def _predict(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             args.output_dir,
             run_data_pipeline=args.run_data_pipeline,
             run_inference=args.run_inference,
+            write_input_json=args.write_input_json,
             seeds=args.seeds,
             skip=args.skip,
             checkpoint=args.checkpoint,
@@ -121,7 +128,8 @@ def _predict(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     except (FileNotFoundError, ValueError) as error:
         parser.error(str(error))
 
-    print(f"Prepared input: {result.prepared_path}")
+    label = "Input snapshot written" if args.write_input_json else "Input used"
+    print(f"{label}: {result.prepared_path}")
     if result.seeds:
         print(f"Seeds: {','.join(map(str, result.seeds))}")
         print(f"Published models: {len(result.prediction_paths)}")

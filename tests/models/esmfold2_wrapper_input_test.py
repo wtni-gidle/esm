@@ -1,6 +1,7 @@
 """Unit tests for the ESMFold2 first-layer wrapper manifest."""
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -89,6 +90,43 @@ def test_msa_modes(fields, mode):
 def test_rejects_ambiguous_msa_sources(fields, message):
     with pytest.raises(PreparedInputError, match=message):
         PreparedInput.from_dict(minimal_input(**fields))
+
+
+@pytest.mark.parametrize("native_fields", [{"msa": ">q\nACDE\n"}, {"msaPath": "native.a3m"}])
+@pytest.mark.parametrize("split_fields", [
+    {"pairedMsa": "", "unpairedMsa": ">q\nACDE\n"},
+    {"pairedMsaPath": "paired.a3m", "unpairedMsaPath": "unpaired.a3m"},
+])
+def test_rejects_cross_chain_msa_mode_mixing(native_fields, split_fields):
+    value = minimal_input(**native_fields)
+    value["sequences"].append({
+        "type": "protein", "id": ["B", "C"], "sequence": "ACDE", **split_fields,
+    })
+    with pytest.raises(PreparedInputError, match="cannot mix") as error:
+        PreparedInput.from_dict(value)
+    assert all(chain in str(error.value) for chain in ("A", "B", "C"))
+
+
+@pytest.mark.parametrize("fields", [
+    {"msa": ">q\nACDE\n"},
+    {"pairedMsa": "", "unpairedMsa": ">q\nACDE\n"},
+])
+def test_uniform_msa_mode_allows_query_only_and_nonprotein_chains(fields):
+    value = minimal_input(**fields)
+    value["sequences"].extend([
+        {"type": "protein", "id": ["B", "C"], "sequence": "ACDE", **fields},
+        {"type": "protein", "id": "D", "sequence": "ACDE"},
+        {"type": "rna", "id": "R", "sequence": "ACGU"},
+        {"type": "ligand", "id": "L", "ccd": ["ATP"]},
+    ])
+    assert PreparedInput.from_dict(value).to_dict() == value
+
+
+def test_direct_prepared_objects_cannot_bypass_msa_mode_check():
+    native = PreparedInput.from_dict(minimal_input(msa=">q\nACDE\n"))
+    split = PreparedInput.from_dict(minimal_input(id="B", pairedMsa="", unpairedMsa=">q\nACDE\n"))
+    with pytest.raises(PreparedInputError, match="cannot mix"):
+        replace(native, sequences=(native.sequences[0], split.sequences[0]))
 
 
 def test_rejects_duplicate_chain_ids_across_entities():

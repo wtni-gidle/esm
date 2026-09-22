@@ -38,8 +38,8 @@ def test_inline_split_msa_is_kept_as_two_portable_authoritative_resources(tmp_pa
 
     stored = json.loads(output.read_text())
     protein = stored["sequences"][0]
-    assert protein["pairedMsaPath"] == "msas/target__A_paired.a3m.zst"
-    assert protein["unpairedMsaPath"] == "msas/target__A_unpaired.a3m.zst"
+    assert protein["pairedMsaPath"] == "msas/target__A_pairedmsa.a3m.zst"
+    assert protein["unpairedMsaPath"] == "msas/target__A_unpairedmsa.a3m.zst"
     assert "pairedMsa" not in protein and "unpairedMsa" not in protein
     assert read_text_auto(output.parent / protein["pairedMsaPath"]) == paired
     assert read_text_auto(output.parent / protein["unpairedMsaPath"]) == unpaired

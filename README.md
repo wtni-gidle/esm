@@ -182,7 +182,7 @@ For a tutorial on using SAEs using the Biohub Platform, see [here](https://githu
 <a name="esmfold2"></a>
 
 [EnsembleFold-compatible ESMFold2 wrapper](ESMFOLD2_WRAPPER.md) documents the
-versioned JSON input, Boltz-style paired/unpaired MSA adapter, staged CLI, and
+versioned JSON input, Boltz-style paired/unpaired MSA adapter, optional input snapshots, and
 seed/sample output layout added for local batch prediction.
 
 

@@ -84,14 +84,14 @@ def seed_outputs_complete(
     sample_count: int,
     include_embeddings: bool = False,
 ) -> bool:
-    """Return whether every canonical artifact for one seed exists as a file."""
+    """Check that every requested artifact is a nonempty file, without parsing."""
     try:
         expected = expected_seed_samples(
             predictions_dir, seed=seed, sample_count=sample_count
         )
         for sample in expected:
             if not all(
-                path.is_file()
+                path.is_file() and path.stat().st_size > 0
                 for path in (
                     sample.model_path,
                     sample.summary_path,
@@ -101,10 +101,10 @@ def seed_outputs_complete(
                 )
             ):
                 return False
-        if include_embeddings and not expected_embedding_path(
-            predictions_dir, seed=seed
-        ).is_file():
-            return False
+        if include_embeddings:
+            embedding_path = expected_embedding_path(predictions_dir, seed=seed)
+            if not embedding_path.is_file() or embedding_path.stat().st_size == 0:
+                return False
         return True
     except (OSError, PredictionOutputError):
         return False

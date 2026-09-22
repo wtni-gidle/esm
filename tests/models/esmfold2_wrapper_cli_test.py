@@ -39,8 +39,8 @@ def test_cli_forwards_every_public_option(monkeypatch, tmp_path, capsys):
         "predict",
         "-i", str(source),
         "-o", str(tmp_path / "out"),
-        "-D", "false",
-        "-P", "true",
+        "-J", "true",
+        "-D", "false", "-P", "true",
         "-r", "9,7",
         "-n", "2",
         "-c", "4",
@@ -62,6 +62,7 @@ def test_cli_forwards_every_public_option(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert calls[0][0] == (source, tmp_path / "out")
     assert calls[0][1] == {
+        "write_input_json": True,
         "run_data_pipeline": False,
         "run_inference": True,
         "seeds": "9,7",
@@ -102,16 +103,17 @@ def test_cli_auto_values_map_to_python_none(monkeypatch, tmp_path):
         "predict",
         "-i", str(source),
         "-o", str(tmp_path / "out"),
-        "-D", "true",
-        "-P", "false",
     ])
 
     assert captured["dtype"] is None
     assert captured["kernel_backend"] is None
     assert captured["num_diffusion_samples"] == 5
+    assert captured["write_input_json"] is False
+    assert captured["run_data_pipeline"] is True
+    assert captured["run_inference"] is True
 
 
-def test_data_only_cli_vertical_slice_does_not_import_torch(tmp_path):
+def test_all_skipped_cli_writes_requested_snapshot_without_importing_torch(tmp_path):
     source = tmp_path / "input.json"
     output_dir = tmp_path / "output"
     write_input(source)
@@ -119,9 +121,16 @@ def test_data_only_cli_vertical_slice_does_not_import_torch(tmp_path):
         "predict",
         "-i", str(source),
         "-o", str(output_dir),
-        "-D", "true",
-        "-P", "false",
+        "--write_input_json", "true",
+        "-r", "7", "-n", "1", "-S", "true",
     ]
+    from esm.esmfold2_wrapper.outputs import expected_seed_samples
+
+    sample = expected_seed_samples(output_dir / "target", seed=7, sample_count=1)[0]
+    for path in (sample.model_path, sample.summary_path, sample.plddt_path,
+                 sample.pae_path, sample.pde_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("nonempty; skip must not parse this")
     program = (
         "import sys; "
         "from esm.esmfold2_wrapper.cli import main; "
@@ -140,13 +149,13 @@ def test_data_only_cli_vertical_slice_does_not_import_torch(tmp_path):
 
     prepared = output_dir / "target/target_data.json"
     assert prepared.is_file()
-    assert "Prepared input:" in completed.stdout
+    assert "Input snapshot written:" in completed.stdout
 
 
 @pytest.mark.parametrize(
     "arguments,message",
     [
-        (["-D", "maybe"], "must be true or false"),
+        (["-J", "maybe"], "must be true or false"),
         (["--device", "mps"], "must be auto, cpu, cuda"),
         (["--dtype", "bf16"], "invalid choice"),
     ],
@@ -165,7 +174,7 @@ def test_cli_rejects_invalid_values(arguments, message, tmp_path, capsys):
     assert message in capsys.readouterr().err
 
 
-def test_cli_reports_invalid_stage_combination_without_traceback(tmp_path, capsys):
+def test_cli_rejects_no_stage_without_traceback(tmp_path, capsys):
     source = tmp_path / "input.json"
     write_input(source)
     with pytest.raises(SystemExit) as error:
@@ -173,8 +182,7 @@ def test_cli_reports_invalid_stage_combination_without_traceback(tmp_path, capsy
             "predict",
             "-i", str(source),
             "-o", str(tmp_path / "out"),
-            "-D", "false",
-            "-P", "false",
+            "-D", "false", "-P", "false",
         ])
     assert error.value.code == 2
     stderr = capsys.readouterr().err
@@ -209,8 +217,8 @@ def test_shell_preserves_argument_boundaries_and_sets_one_visible_gpu(tmp_path):
             "-i", str(source),
             "-o", str(output_dir),
             "-d", "3",
-            "-D", "false",
-            "-P", "TRUE",
+            "-J", "TRUE",
+            "-D", "false", "-P", "true",
             "-r", "7,9",
             "-n", "2",
             "-m", "local-esmc",
@@ -229,6 +237,9 @@ def test_shell_preserves_argument_boundaries_and_sets_one_visible_gpu(tmp_path):
     assert arguments[arguments.index("--seeds") + 1] == "7,9"
     assert arguments[arguments.index("--esmc-checkpoint") + 1] == "local-esmc"
     assert arguments[arguments.index("--device") + 1] == "cuda"
+    assert arguments[arguments.index("--write-input-json") + 1] == "true"
+    assert arguments[arguments.index("--run-data-pipeline") + 1] == "false"
+    assert arguments[arguments.index("--run-inference") + 1] == "true"
     assert captured_device.read_text() == "3"
     assert completed.stderr == ""
 
@@ -252,7 +263,7 @@ def test_shell_rejects_invalid_boolean_before_calling_python(tmp_path):
             str(script),
             "-i", str(source),
             "-o", str(tmp_path / "output"),
-            "-P", "maybe",
+            "-J", "maybe",
         ],
         check=False,
         capture_output=True,
@@ -260,7 +271,36 @@ def test_shell_rejects_invalid_boolean_before_calling_python(tmp_path):
     )
 
     assert completed.returncode == 2
-    assert "-P must be true or false" in completed.stderr
+    assert "-J must be true or false" in completed.stderr
+
+
+def test_data_only_shell_runs_without_torch_or_predictions(tmp_path):
+    source = tmp_path / "input.json"
+    write_input(source)
+    script = Path(__file__).parents[2] / "run_esmfold2.sh"
+    result = subprocess.run(
+        [str(script), "-i", str(source), "-o", str(tmp_path / "out"),
+         "-D", "true", "-P", "false", "-J", "true"],
+        env={**os.environ, "PYTHON_BIN": sys.executable,
+             "PYTHONPATH": str(Path(__file__).parents[2])},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "out/target/target_data.json").is_file()
+    assert not (tmp_path / "out/target/models").exists()
+
+
+def test_data_only_cli_does_not_import_torch(tmp_path):
+    source = tmp_path / "input.json"
+    write_input(source)
+    args = ["predict", "-i", str(source), "-o", str(tmp_path / "out"),
+            "-D", "true", "-P", "false", "-J", "true"]
+    program = ("import sys; from esm.esmfold2_wrapper.cli import main; "
+               f"assert main({args!r}) == 0; assert 'torch' not in sys.modules")
+    result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True,
+                            env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[2])})
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "out/target/target_data.json").is_file()
 
 
 def test_console_script_points_at_lightweight_cli():

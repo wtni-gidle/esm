@@ -100,11 +100,11 @@ def _materialize_entity(
 
     assert resource.paired is not None and resource.unpaired is not None
     paired_path = write_zstd_text(
-        _resource_path(msa_dir, f"{stem}_paired.a3m.zst", manifest),
+        _resource_path(msa_dir, f"{stem}_pairedmsa.a3m.zst", manifest),
         resource.paired,
     )
     unpaired_path = write_zstd_text(
-        _resource_path(msa_dir, f"{stem}_unpaired.a3m.zst", manifest),
+        _resource_path(msa_dir, f"{stem}_unpairedmsa.a3m.zst", manifest),
         resource.unpaired,
     )
     return replace(
@@ -116,18 +116,11 @@ def _materialize_entity(
     )
 
 
-def prepare_data_bundle(
-    input_path: str | Path, output_manifest_path: str | Path
-) -> PreparedInput:
-    """Validate and publish portable MSA resources plus the final manifest.
-
-    All source MSAs are parsed before anything is written. Each resource is
-    replaced atomically and the manifest is published last. If rewriting an
-    existing fixed-name bundle is interrupted, rerun the data stage before
-    starting inference.
-    """
+def _load_validated_sources(
+    input_path: str | Path,
+) -> tuple[PreparedInput, list[PreparedEntity], list[_MSAResources]]:
+    """Read and validate existing conditions without creating public files."""
     source_manifest = Path(input_path).expanduser().resolve()
-    output_manifest = Path(output_manifest_path).expanduser().resolve()
     prepared = load_prepared_input(source_manifest)
     resolved = prepared.validate_resources(source_manifest)
 
@@ -140,6 +133,26 @@ def prepare_data_bundle(
         for entity, resource in zip(protein_entities, protein_resources, strict=True)
         if resource.mode == "split" and resource.paired is not None
     ])
+    return prepared, protein_entities, protein_resources
+
+
+def validate_data_input(input_path: str | Path) -> None:
+    """Run the lightweight data pipeline without publishing a snapshot."""
+    _load_validated_sources(input_path)
+
+
+def prepare_data_bundle(
+    input_path: str | Path, output_manifest_path: str | Path
+) -> PreparedInput:
+    """Validate and publish portable MSA resources plus the final manifest.
+
+    All source MSAs are parsed before anything is written. Each resource is
+    replaced atomically and the manifest is published last. If rewriting an
+    existing fixed-name bundle is interrupted, rerun with write_input_json=True
+    using the original source input to refresh it.
+    """
+    output_manifest = Path(output_manifest_path).expanduser().resolve()
+    prepared, protein_entities, protein_resources = _load_validated_sources(input_path)
 
     resource_names: list[str] = []
     for entity, resource in zip(protein_entities, protein_resources, strict=True):
@@ -148,7 +161,7 @@ def prepare_data_bundle(
             resource_names.append(f"{stem}_msa.a3m.zst")
         elif resource.mode == "split":
             resource_names.extend(
-                [f"{stem}_paired.a3m.zst", f"{stem}_unpaired.a3m.zst"]
+                [f"{stem}_pairedmsa.a3m.zst", f"{stem}_unpairedmsa.a3m.zst"]
             )
     folded_names = [name.casefold() for name in resource_names]
     if len(folded_names) != len(set(folded_names)):

@@ -1,6 +1,6 @@
 """Versioned JSON contract for the EnsembleFold ESMFold2 wrapper.
 
-This module deliberately lives outside :mod:`esm.models.esmfold2` so data-only
+This module deliberately lives outside :mod:`esm.models.esmfold2` so input
 work does not import Torch or initialize any model-side resources.
 """
 
@@ -368,6 +368,22 @@ class PreparedInput:
     version: int
     name: str
     sequences: tuple[PreparedEntity, ...]
+
+    def __post_init__(self) -> None:
+        # Native keys and split-file row numbers do not share a key namespace.
+        chains_by_mode: dict[str, list[str]] = {"native": [], "split": []}
+        for entity in self.sequences:
+            if entity.kind == "protein" and entity.msa_mode in chains_by_mode:
+                chains_by_mode[entity.msa_mode].extend(entity.ids)
+        if chains_by_mode["native"] and chains_by_mode["split"]:
+            raise PreparedInputError(
+                "A complex cannot mix native msa/msaPath with paired/unpaired "
+                "MSA inputs across protein chains. "
+                f"Native chains: {', '.join(chains_by_mode['native'])}; "
+                f"split chains: {', '.join(chains_by_mode['split'])}. "
+                "Use one MSA input mode for all proteins with an MSA; "
+                "query-only proteins are allowed."
+            )
 
     @classmethod
     def from_dict(cls, value: Any) -> PreparedInput:
