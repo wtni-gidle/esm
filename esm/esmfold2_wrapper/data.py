@@ -84,14 +84,16 @@ def _materialize_entity(
     target_name: str,
     msa_dir: Path,
     manifest: Path,
+    compress_fold_input: bool,
 ) -> PreparedEntity:
     if resource.mode == "none":
         return entity
     stem = f"{target_name}__{entity.ids[0]}"
+    suffix = ".zst" if compress_fold_input else ""
     if resource.mode == "native":
         assert resource.native is not None
-        destination = _resource_path(msa_dir, f"{stem}_msa.a3m.zst", manifest)
-        path = write_zstd_text(destination, resource.native)
+        destination = _resource_path(msa_dir, f"{stem}_msa.a3m{suffix}", manifest)
+        path = write_zstd_text(destination, resource.native, compress=compress_fold_input)
         return replace(
             entity,
             msa=None,
@@ -100,12 +102,14 @@ def _materialize_entity(
 
     assert resource.paired is not None and resource.unpaired is not None
     paired_path = write_zstd_text(
-        _resource_path(msa_dir, f"{stem}_pairedmsa.a3m.zst", manifest),
+        _resource_path(msa_dir, f"{stem}_pairedmsa.a3m{suffix}", manifest),
         resource.paired,
+        compress=compress_fold_input,
     )
     unpaired_path = write_zstd_text(
-        _resource_path(msa_dir, f"{stem}_unpairedmsa.a3m.zst", manifest),
+        _resource_path(msa_dir, f"{stem}_unpairedmsa.a3m{suffix}", manifest),
         resource.unpaired,
+        compress=compress_fold_input,
     )
     return replace(
         entity,
@@ -142,7 +146,8 @@ def validate_data_input(input_path: str | Path) -> None:
 
 
 def prepare_data_bundle(
-    input_path: str | Path, output_manifest_path: str | Path
+    input_path: str | Path, output_manifest_path: str | Path,
+    *, compress_fold_input: bool = False,
 ) -> PreparedInput:
     """Validate and publish portable MSA resources plus the final manifest.
 
@@ -154,14 +159,15 @@ def prepare_data_bundle(
     output_manifest = Path(output_manifest_path).expanduser().resolve()
     prepared, protein_entities, protein_resources = _load_validated_sources(input_path)
 
+    suffix = ".zst" if compress_fold_input else ""
     resource_names: list[str] = []
     for entity, resource in zip(protein_entities, protein_resources, strict=True):
         stem = f"{prepared.name}__{entity.ids[0]}"
         if resource.mode == "native":
-            resource_names.append(f"{stem}_msa.a3m.zst")
+            resource_names.append(f"{stem}_msa.a3m{suffix}")
         elif resource.mode == "split":
             resource_names.extend(
-                [f"{stem}_pairedmsa.a3m.zst", f"{stem}_unpairedmsa.a3m.zst"]
+                [f"{stem}_pairedmsa.a3m{suffix}", f"{stem}_unpairedmsa.a3m{suffix}"]
             )
     folded_names = [name.casefold() for name in resource_names]
     if len(folded_names) != len(set(folded_names)):
@@ -177,6 +183,7 @@ def prepare_data_bundle(
             target_name=prepared.name,
             msa_dir=msa_dir,
             manifest=output_manifest,
+            compress_fold_input=compress_fold_input,
         )
         for entity, resource in zip(protein_entities, protein_resources, strict=True)
     )

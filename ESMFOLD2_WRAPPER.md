@@ -137,8 +137,17 @@ the row-number keys are generated only in memory for inference.
 
 `-D/--run-data-pipeline` and `-P/--run-inference` select the stages; both default
 to true. `-J/--write-input-json` (also `--write_input_json` in the Python CLI)
-independently controls snapshot publication and defaults to **false**.
-At least one stage must be enabled.
+independently controls snapshot publication and defaults to **true**.
+At least one stage must be enabled. Inference-only and fully skipped runs refresh
+current input resources when publication is enabled; no search is introduced.
+
+`--compress-fold-input` / `--compress_fold_input` (shell `-z`) defaults to false:
+MSAs remain external plain text. True writes zstd resources. Readers accept either
+format regardless of this write setting. `--compress-full-confidence` /
+`--compress_full_confidence` (shell `-f`) defaults to false: separate pLDDT, PAE
+and PDE files use JSON. True uses compressed NPZ with the same stems, keys, values
+and array shapes. Switching format removes old counterparts after writing. Seed
+embeddings remain NPZ, and skip checks use the selected confidence format.
 
 The data stage reads and validates supplied JSON/MSAs, including query matches
 and cross-chain paired depths. It neither searches nor builds model features.
@@ -165,11 +174,11 @@ In addition to predictions, this validates and writes a portable input snapshot:
 results/target/
 ├── target_data.json
 └── msas/
-    ├── target__A_pairedmsa.a3m.zst
-    └── target__A_unpairedmsa.a3m.zst
+    ├── target__A_pairedmsa.a3m
+    └── target__A_unpairedmsa.a3m
 ```
 
-Native input instead produces `msas/target__A_msa.a3m.zst`. The JSON uses paths
+Native input instead produces `msas/target__A_msa.a3m`. The JSON uses paths
 relative to itself, even when the supplied paths were absolute or external.
 Files are updated even if a previous snapshot exists or every seed is skipped.
 No MSA search, native-to-split conversion, or feature cache is involved.
@@ -268,9 +277,9 @@ results/target/
 ├── summary_confidences/
 │   └── seed-101_sample-0_summary_confidences.json
 ├── full_data/
-│   ├── plddt_seed-101_sample-0.npz
-│   ├── pae_seed-101_sample-0.npz
-│   └── pde_seed-101_sample-0.npz
+│   ├── plddt_seed-101_sample-0.json
+│   ├── pae_seed-101_sample-0.json
+│   └── pde_seed-101_sample-0.json
 └── embeddings/
     └── seed-101_embeddings.npz
 ```

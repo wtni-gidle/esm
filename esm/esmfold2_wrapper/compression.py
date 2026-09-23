@@ -43,13 +43,14 @@ def read_text_auto(path: str | Path) -> str:
         ) from error
 
 
-def write_zstd_text(path: str | Path, text: str) -> Path:
-    """Atomically write UTF-8 text as a zstd frame."""
+def write_zstd_text(path: str | Path, text: str, *, compress: bool = True) -> Path:
+    """Atomically write UTF-8 text, optionally as a zstd frame."""
     destination = Path(path).expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
     try:
-        temporary.write_bytes(zstd.ZstdCompressor().compress(text.encode("utf-8")))
+        data = text.encode("utf-8")
+        temporary.write_bytes(zstd.ZstdCompressor().compress(data) if compress else data)
         os.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)

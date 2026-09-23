@@ -55,9 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     predict.add_argument(
         "-J", "--write-input-json", "--write_input_json",
-        type=_boolean, default=False, metavar="BOOL",
-        help="Write/update portable <name>_data.json and MSA resources (default: false).",
+        type=_boolean, default=True, metavar="BOOL",
+        help="Write/update portable <name>_data.json and MSA resources (default: true).",
     )
+    predict.add_argument("-z", "--compress-fold-input", "--compress_fold_input",
+                         type=_boolean, default=False, metavar="BOOL")
+    predict.add_argument("-f", "--compress-full-confidence", "--compress_full_confidence",
+                         type=_boolean, default=False, metavar="BOOL")
     predict.add_argument(
         "-r", "--seeds", "--model-seeds", help="One uint32 seed or comma list."
     )
@@ -106,6 +110,8 @@ def _predict(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             run_data_pipeline=args.run_data_pipeline,
             run_inference=args.run_inference,
             write_input_json=args.write_input_json,
+            compress_fold_input=args.compress_fold_input,
+            compress_full_confidence=args.compress_full_confidence,
             seeds=args.seeds,
             skip=args.skip,
             checkpoint=args.checkpoint,

@@ -63,6 +63,8 @@ def test_cli_forwards_every_public_option(monkeypatch, tmp_path, capsys):
     assert calls[0][0] == (source, tmp_path / "out")
     assert calls[0][1] == {
         "write_input_json": True,
+        "compress_fold_input": False,
+        "compress_full_confidence": False,
         "run_data_pipeline": False,
         "run_inference": True,
         "seeds": "9,7",
@@ -108,7 +110,7 @@ def test_cli_auto_values_map_to_python_none(monkeypatch, tmp_path):
     assert captured["dtype"] is None
     assert captured["kernel_backend"] is None
     assert captured["num_diffusion_samples"] == 5
-    assert captured["write_input_json"] is False
+    assert captured["write_input_json"] is True
     assert captured["run_data_pipeline"] is True
     assert captured["run_inference"] is True
 

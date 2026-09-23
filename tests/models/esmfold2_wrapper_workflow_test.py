@@ -67,7 +67,7 @@ def test_inference_only_consumes_the_given_prepared_manifest(tmp_path):
     write_input(source)
 
     plan = build_workflow_plan(
-        source, tmp_path / "outputs"
+        source, tmp_path / "outputs", write_input_json=False
     )
 
     assert plan.prepared_path == source.resolve()
@@ -110,7 +110,7 @@ def test_data_only_validates_without_loading_model(tmp_path, monkeypatch, write_
     assert result.prediction_paths == ()
     if write_snapshot:
         stored = json.loads(result.prepared_path.read_text())
-        assert stored["sequences"][0]["msaPath"] == "msas/target__A_msa.a3m.zst"
+        assert stored["sequences"][0]["msaPath"] == "msas/target__A_msa.a3m"
     else:
         assert result.prepared_path == source.resolve()
         assert not (tmp_path / "out").exists()
@@ -366,10 +366,10 @@ def test_combined_workflow_covers_bundle_adapter_and_publication(
     ).resolve()
     prepared = json.loads(result.prepared_path.read_text())
     assert prepared["sequences"][0]["pairedMsaPath"] == (
-        "msas/paired_target__A_pairedmsa.a3m.zst"
+        "msas/paired_target__A_pairedmsa.a3m"
     )
     assert prepared["sequences"][0]["unpairedMsaPath"] == (
-        "msas/paired_target__A_unpairedmsa.a3m.zst"
+        "msas/paired_target__A_unpairedmsa.a3m"
     )
     assert len(load_calls) == 1
     assert fold_calls == [11, 13]
@@ -515,7 +515,7 @@ def test_prediction_reads_replaced_msa_without_reusing_old_snapshot(
                 for p in [snapshot, *snapshot.parent.glob("msas/*")]} == before
 
 
-def test_default_prediction_does_not_publish_json_or_msa_resources(tmp_path, monkeypatch):
+def test_write_false_does_not_publish_json_or_msa_resources(tmp_path, monkeypatch):
     source = tmp_path / "input.json"
     write_input(source)
     model = SimpleNamespace(config=SimpleNamespace(msa_encoder=SimpleNamespace(enabled=False)))
@@ -526,7 +526,7 @@ def test_default_prediction_does_not_publish_json_or_msa_resources(tmp_path, mon
 
     monkeypatch.setattr(inference_module, "load_esmfold2_model", lambda *a, **k: model)
     monkeypatch.setattr(inference_module, "_new_input_builder", Builder)
-    result = run_prepared_workflow(source, tmp_path / "out", seeds=7, num_diffusion_samples=1)
+    result = run_prepared_workflow(source, tmp_path / "out", seeds=7, num_diffusion_samples=1, write_input_json=False)
     assert result.prepared_path == source.resolve()
     assert result.prediction_paths[0].is_file()
     assert not (tmp_path / "out/target/target_data.json").exists()

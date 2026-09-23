@@ -81,7 +81,7 @@ def build_workflow_plan(
     *,
     run_data_pipeline: bool = True,
     run_inference: bool = True,
-    write_input_json: bool = False,
+    write_input_json: bool = True,
     validate_resources: bool = True,
 ) -> WorkflowPlan:
     """Validate an invocation without creating directories or loading weights."""
@@ -128,7 +128,9 @@ def run_prepared_workflow(
     *,
     run_data_pipeline: bool = True,
     run_inference: bool = True,
-    write_input_json: bool = False,
+    write_input_json: bool = True,
+    compress_fold_input: bool = False,
+    compress_full_confidence: bool = False,
     seeds: str | int | Sequence[int] | None = None,
     skip: bool = False,
     checkpoint: str | Path = "biohub/ESMFold2",
@@ -186,7 +188,8 @@ def run_prepared_workflow(
     if plan.write_input_json:
         from esm.esmfold2_wrapper.data import prepare_data_bundle
 
-        prepare_data_bundle(plan.input_path, plan.prepared_path)
+        prepare_data_bundle(plan.input_path, plan.prepared_path,
+                            compress_fold_input=compress_fold_input)
         manifest_path = plan.prepared_path
     elif plan.run_data_pipeline:
         from esm.esmfold2_wrapper.data import validate_data_input
@@ -216,6 +219,7 @@ def run_prepared_workflow(
             plan.predictions_dir,
             seed=seed,
             sample_count=num_diffusion_samples,
+            compress_full_confidence=compress_full_confidence,
             include_embeddings=include_embeddings,
         )
     )
@@ -230,6 +234,7 @@ def run_prepared_workflow(
             plan.predictions_dir,
             seed=seed,
             sample_count=num_diffusion_samples,
+            compress_full_confidence=compress_full_confidence,
         )
     )
     if not pending_seeds:
@@ -270,6 +275,7 @@ def run_prepared_workflow(
         )
         published = publish_inference_results(
             run.results,
+            compress_full_confidence=compress_full_confidence,
             predictions_dir=plan.predictions_dir,
             seed=seed,
             include_embeddings=include_embeddings,

@@ -46,10 +46,12 @@ def expected_seed_samples(
     *,
     seed: int,
     sample_count: int,
+    compress_full_confidence: bool = False,
 ) -> tuple[PublishedSample, ...]:
     """Return the exact canonical paths expected for one seed."""
     _validate_seed_and_count(seed, sample_count)
     root = Path(predictions_dir).expanduser().resolve()
+    extension = "npz" if compress_full_confidence else "json"
     return tuple(
         PublishedSample(
             seed=seed,
@@ -61,10 +63,10 @@ def expected_seed_samples(
                 / f"seed-{seed}_sample-{sample}_summary_confidences.json"
             ),
             plddt_path=(
-                root / "full_data" / f"plddt_seed-{seed}_sample-{sample}.npz"
+                root / "full_data" / f"plddt_seed-{seed}_sample-{sample}.{extension}"
             ),
-            pae_path=root / "full_data" / f"pae_seed-{seed}_sample-{sample}.npz",
-            pde_path=root / "full_data" / f"pde_seed-{seed}_sample-{sample}.npz",
+            pae_path=root / "full_data" / f"pae_seed-{seed}_sample-{sample}.{extension}",
+            pde_path=root / "full_data" / f"pde_seed-{seed}_sample-{sample}.{extension}",
         )
         for sample in range(sample_count)
     )
@@ -82,12 +84,14 @@ def seed_outputs_complete(
     *,
     seed: int,
     sample_count: int,
+    compress_full_confidence: bool = False,
     include_embeddings: bool = False,
 ) -> bool:
     """Check that every requested artifact is a nonempty file, without parsing."""
     try:
         expected = expected_seed_samples(
-            predictions_dir, seed=seed, sample_count=sample_count
+            predictions_dir, seed=seed, sample_count=sample_count,
+            compress_full_confidence=compress_full_confidence
         )
         for sample in expected:
             if not all(
@@ -192,11 +196,11 @@ def _sample_artifacts(result: Any, paths: PublishedSample) -> list[_Artifact]:
         _Artifact(paths.model_path, "text", cif_text),
         _Artifact(
             paths.plddt_path,
-            "npz",
+            paths.plddt_path.suffix.lstrip("."),
             {"plddt": plddt, "structure_token_plddt": structure_plddt},
         ),
-        _Artifact(paths.pae_path, "npz", {"pae": pae}),
-        _Artifact(paths.pde_path, "npz", {"pde": pde}),
+        _Artifact(paths.pae_path, paths.pae_path.suffix.lstrip("."), {"pae": pae}),
+        _Artifact(paths.pde_path, paths.pde_path.suffix.lstrip("."), {"pde": pde}),
         _Artifact(paths.summary_path, "json", summary),
     ]
 
@@ -221,7 +225,8 @@ def _write_artifact(artifact: _Artifact) -> None:
         artifact.path.write_text(artifact.value, encoding="utf-8")
     elif artifact.kind == "json":
         artifact.path.write_text(
-            json.dumps(artifact.value, indent=2, allow_nan=False) + "\n",
+            json.dumps(artifact.value, indent=2, allow_nan=False,
+                       default=lambda value: value.tolist()) + "\n",
             encoding="utf-8",
         )
     else:
@@ -234,11 +239,13 @@ def publish_inference_results(
     predictions_dir: str | Path,
     seed: int,
     include_embeddings: bool = False,
+    compress_full_confidence: bool = False,
 ) -> tuple[PublishedSample, ...]:
     """Validate and write every sample from one seed."""
     normalized = tuple(results)
     expected = expected_seed_samples(
-        predictions_dir, seed=seed, sample_count=len(normalized)
+        predictions_dir, seed=seed, sample_count=len(normalized),
+        compress_full_confidence=compress_full_confidence
     )
     artifacts = [
         artifact
@@ -256,4 +263,7 @@ def publish_inference_results(
     artifacts.sort(key=lambda artifact: artifact.kind == "json")
     for artifact in artifacts:
         _write_artifact(artifact)
+    for sample in expected:
+        for path in (sample.plddt_path, sample.pae_path, sample.pde_path):
+            path.with_suffix(".json" if compress_full_confidence else ".npz").unlink(missing_ok=True)
     return expected

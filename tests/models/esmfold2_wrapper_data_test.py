@@ -34,7 +34,7 @@ def test_inline_split_msa_is_kept_as_two_portable_authoritative_resources(tmp_pa
     )
     output = tmp_path / "out" / "target" / "target_data.json"
 
-    prepare_data_bundle(source, output)
+    prepare_data_bundle(source, output, compress_fold_input=True)
 
     stored = json.loads(output.read_text())
     protein = stored["sequences"][0]
@@ -62,7 +62,7 @@ def test_empty_paired_is_materialized_instead_of_becoming_missing(tmp_path):
     )
     output = tmp_path / "out/target/target_data.json"
 
-    prepare_data_bundle(source, output)
+    prepare_data_bundle(source, output, compress_fold_input=True)
 
     prepared = load_prepared_input(output).validate_resources(output)
     protein = prepared.sequences[0]
@@ -87,7 +87,7 @@ def test_gzip_source_is_detected_by_magic_and_rewritten_as_zstd(tmp_path):
     )
     output = tmp_path / "out/target/target_data.json"
 
-    prepare_data_bundle(source, output)
+    prepare_data_bundle(source, output, compress_fold_input=True)
 
     protein = load_prepared_input(output).validate_resources(output).sequences[0]
     assert protein.msa_path.read_bytes().startswith(b"\x28\xb5\x2f\xfd")
@@ -141,7 +141,7 @@ def test_bundle_remains_valid_after_moving_the_job_directory(tmp_path):
         [{"type": "protein", "id": "A", "sequence": "ACDE", "msa": ">query\nACDE\n"}],
     )
     original = tmp_path / "out/target/target_data.json"
-    prepare_data_bundle(source, original)
+    prepare_data_bundle(source, original, compress_fold_input=True)
 
     moved_job = tmp_path / "moved"
     original.parent.rename(moved_job)
@@ -163,7 +163,7 @@ def test_all_inputs_are_validated_before_bundle_is_written(tmp_path):
     output = tmp_path / "out/target/target_data.json"
 
     with pytest.raises(ValueError, match="does not match"):
-        prepare_data_bundle(source, output)
+        prepare_data_bundle(source, output, compress_fold_input=True)
 
     assert not output.parent.exists()
 
@@ -191,7 +191,7 @@ def test_split_entities_require_matching_original_paired_depths(tmp_path):
     )
 
     with pytest.raises(ValueError, match="same original row count"):
-        prepare_data_bundle(source, tmp_path / "out/target/target_data.json")
+        prepare_data_bundle(source, tmp_path / "out/target/target_data.json", compress_fold_input=True)
 
 
 def test_case_insensitive_resource_name_collisions_are_rejected(tmp_path):
@@ -205,7 +205,7 @@ def test_case_insensitive_resource_name_collisions_are_rejected(tmp_path):
     )
 
     with pytest.raises(ValueError, match="case-insensitive"):
-        prepare_data_bundle(source, tmp_path / "out/target/target_data.json")
+        prepare_data_bundle(source, tmp_path / "out/target/target_data.json", compress_fold_input=True)
 
 
 def test_existing_msas_symlink_cannot_escape_the_job_directory(tmp_path):
@@ -221,5 +221,5 @@ def test_existing_msas_symlink_cannot_escape_the_job_directory(tmp_path):
     (job / "msas").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError, match="escapes"):
-        prepare_data_bundle(source, job / "target_data.json")
+        prepare_data_bundle(source, job / "target_data.json", compress_fold_input=True)
     assert not list(outside.iterdir())

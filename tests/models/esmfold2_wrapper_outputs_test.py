@@ -53,7 +53,7 @@ def fake_result(sample, *, embeddings=False):
 
 
 def test_expected_paths_use_zero_based_seed_sample_layout(tmp_path):
-    expected = expected_seed_samples(tmp_path, seed=17, sample_count=2)
+    expected = expected_seed_samples(tmp_path, seed=17, sample_count=2, compress_full_confidence=True)
 
     assert expected[0].model_path == (
         tmp_path / "models/seed-17_sample-0_model.cif"
@@ -71,7 +71,7 @@ def test_publish_preserves_sample_order_and_writes_native_confidence(tmp_path):
         [fake_result(0), fake_result(1)],
         predictions_dir=tmp_path,
         seed=17,
-    )
+    compress_full_confidence=True)
 
     assert [path.sample for path in published] == [0, 1]
     assert published[0].model_path.read_text().startswith("data_sample_0\n")
@@ -96,7 +96,7 @@ def test_publish_preserves_sample_order_and_writes_native_confidence(tmp_path):
         )
     with np.load(published[1].pde_path) as archive:
         np.testing.assert_array_equal(archive["pde"], np.full((3, 3), 3.0))
-    assert seed_outputs_complete(tmp_path, seed=17, sample_count=2)
+    assert seed_outputs_complete(tmp_path, seed=17, sample_count=2, compress_full_confidence=True)
 
 
 def test_embeddings_are_seed_level_and_part_of_optional_completeness(tmp_path):
@@ -105,7 +105,7 @@ def test_embeddings_are_seed_level_and_part_of_optional_completeness(tmp_path):
         predictions_dir=tmp_path,
         seed=9,
         include_embeddings=True,
-    )
+    compress_full_confidence=True)
 
     embedding_path = expected_embedding_path(tmp_path, seed=9)
     with np.load(embedding_path) as archive:
@@ -117,12 +117,12 @@ def test_embeddings_are_seed_level_and_part_of_optional_completeness(tmp_path):
         np.testing.assert_array_equal(archive["pair_pooled"], np.full((3, 4), 0.5))
     assert seed_outputs_complete(
         tmp_path, seed=9, sample_count=2, include_embeddings=True
-    )
+    , compress_full_confidence=True)
     embedding_path.unlink()
-    assert seed_outputs_complete(tmp_path, seed=9, sample_count=2)
+    assert seed_outputs_complete(tmp_path, seed=9, sample_count=2, compress_full_confidence=True)
     assert not seed_outputs_complete(
         tmp_path, seed=9, sample_count=2, include_embeddings=True
-    )
+    , compress_full_confidence=True)
 
 
 def test_non_embedding_rerun_leaves_optional_embedding_untouched(tmp_path):
@@ -131,33 +131,33 @@ def test_non_embedding_rerun_leaves_optional_embedding_untouched(tmp_path):
         predictions_dir=tmp_path,
         seed=11,
         include_embeddings=True,
-    )
+    compress_full_confidence=True)
     embedding_path = expected_embedding_path(tmp_path, seed=11)
     assert embedding_path.is_file()
 
     publish_inference_results(
         [fake_result(1)], predictions_dir=tmp_path, seed=11
-    )
+    , compress_full_confidence=True)
 
     assert embedding_path.is_file()
     assert seed_outputs_complete(
         tmp_path, seed=11, sample_count=1, include_embeddings=True
-    )
+    , compress_full_confidence=True)
 
 
 def test_skip_checks_nonempty_files_without_parsing_outputs(tmp_path):
     published = publish_inference_results(
         [fake_result(0)], predictions_dir=tmp_path, seed=3
-    )
+    , compress_full_confidence=True)
     published[0].summary_path.write_text("not json")
     published[0].model_path.write_text("not cif")
     published[0].pae_path.write_text("not npz")
 
-    assert seed_outputs_complete(tmp_path, seed=3, sample_count=1)
+    assert seed_outputs_complete(tmp_path, seed=3, sample_count=1, compress_full_confidence=True)
 
-    publish_inference_results([fake_result(0)], predictions_dir=tmp_path, seed=3)
+    publish_inference_results([fake_result(0)], predictions_dir=tmp_path, seed=3, compress_full_confidence=True)
     published[0].pde_path.unlink()
-    assert not seed_outputs_complete(tmp_path, seed=3, sample_count=1)
+    assert not seed_outputs_complete(tmp_path, seed=3, sample_count=1, compress_full_confidence=True)
 
 
 @pytest.mark.parametrize("artifact", ["model", "summary", "plddt", "pae", "pde", "embeddings"])
@@ -178,23 +178,23 @@ def test_skip_requires_each_requested_artifact_to_be_a_nonempty_file(
     for path in paths.values():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"nonempty garbage accepted without parsing")
-    assert seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True)
+    assert seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True, compress_full_confidence=True)
     damaged = paths[9, 1, artifact]
     damaged.unlink()
     if state == "empty":
         damaged.touch()
     elif state == "directory":
         damaged.mkdir()
-    assert seed_outputs_complete(tmp_path, seed=7, sample_count=2, include_embeddings=True)
-    assert not seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True)
+    assert seed_outputs_complete(tmp_path, seed=7, sample_count=2, include_embeddings=True, compress_full_confidence=True)
+    assert not seed_outputs_complete(tmp_path, seed=9, sample_count=2, include_embeddings=True, compress_full_confidence=True)
     if artifact == "embeddings":
-        assert seed_outputs_complete(tmp_path, seed=9, sample_count=2)
+        assert seed_outputs_complete(tmp_path, seed=9, sample_count=2, compress_full_confidence=True)
 
 
 def test_all_results_validate_before_existing_seed_is_replaced(tmp_path):
     old_paths = publish_inference_results(
         [fake_result(0), fake_result(1)], predictions_dir=tmp_path, seed=5
-    )
+    , compress_full_confidence=True)
     before = {path: path.read_bytes() for item in old_paths for path in (
         item.model_path,
         item.summary_path,
@@ -208,7 +208,7 @@ def test_all_results_validate_before_existing_seed_is_replaced(tmp_path):
     with pytest.raises(PredictionOutputError, match="missing required pde"):
         publish_inference_results(
             [fake_result(7), invalid], predictions_dir=tmp_path, seed=5
-        )
+        , compress_full_confidence=True)
 
     assert {path: path.read_bytes() for path in before} == before
 
@@ -216,4 +216,4 @@ def test_all_results_validate_before_existing_seed_is_replaced(tmp_path):
 @pytest.mark.parametrize("seed", [-1, 2**32, True])
 def test_invalid_seed_is_rejected(seed, tmp_path):
     with pytest.raises(PredictionOutputError, match="uint32"):
-        expected_seed_samples(tmp_path, seed=seed, sample_count=1)
+        expected_seed_samples(tmp_path, seed=seed, sample_count=1, compress_full_confidence=True)

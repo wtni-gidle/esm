@@ -109,8 +109,8 @@ def test_prepared_unpaired_replacement_reaches_two_chain_features(
     else:
         current = json.loads(prepared.read_text())
         resource = current["sequences"][0]["unpairedMsaPath"]
-        assert resource == "msas/job__A_unpairedmsa.a3m.zst"
+        assert resource == "msas/job__A_unpairedmsa.a3m"
         assert read_text_auto(job / resource) == replacement
         assert [item["pairedMsaPath"] for item in current["sequences"]] == [
-            "msas/job__A_pairedmsa.a3m.zst", "msas/job__B_pairedmsa.a3m.zst"
+            "msas/job__A_pairedmsa.a3m", "msas/job__B_pairedmsa.a3m"
         ]
