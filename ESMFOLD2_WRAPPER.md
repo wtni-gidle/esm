@@ -243,7 +243,7 @@ returns no model results and ignores inference-specific seed/sampling options.
 | --- | ---: | --- |
 | `-D, --run-data-pipeline` | `true` | Read/validate/organize existing input, without searching |
 | `-P, --run-inference` | `true` | Run prediction for pending seeds |
-| `-J, --write-input-json` | `false` | Write/update portable input JSON and MSA resources |
+| `-J, --write-input-json` | `true` | Write/update portable input JSON and MSA resources |
 | `-r, --seeds` | generated | One uint32 seed or comma-separated seeds |
 | `-n, --diffusion-samples` | `5` | Samples per seed |
 | `-c, --loops` | `20` | ESMFold2 folding loops |
