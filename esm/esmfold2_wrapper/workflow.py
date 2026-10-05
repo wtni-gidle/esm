@@ -185,16 +185,15 @@ def run_prepared_workflow(
         )
 
     manifest_path = plan.input_path
-    if plan.write_input_json:
-        from esm.esmfold2_wrapper.data import prepare_data_bundle
+    sources = None
+    if plan.write_input_json or plan.run_data_pipeline:
+        from esm.esmfold2_wrapper.data import _load_validated_sources, _publish_data_bundle
 
-        prepare_data_bundle(plan.input_path, plan.prepared_path,
-                            compress_fold_input=compress_fold_input)
-        manifest_path = plan.prepared_path
-    elif plan.run_data_pipeline:
-        from esm.esmfold2_wrapper.data import validate_data_input
-
-        validate_data_input(plan.input_path)
+        sources = _load_validated_sources(plan.input_path)
+        if plan.write_input_json:
+            _publish_data_bundle(sources, plan.prepared_path,
+                                 compress_fold_input=compress_fold_input)
+            manifest_path = plan.prepared_path
 
     if not plan.run_inference:
         return WorkflowResult(prepared_path=manifest_path, seeds=(), prediction_paths=())
@@ -202,6 +201,7 @@ def run_prepared_workflow(
     from esm.esmfold2_wrapper.inference import (
         _new_input_builder,
         _run_with_loaded_model,
+        _structure_input_from_resources,
         load_esmfold2_model,
         load_structure_prediction_input,
     )
@@ -244,7 +244,13 @@ def run_prepared_workflow(
             prediction_paths=expected_model_paths,
         )
 
-    prepared, structure_input = load_structure_prediction_input(manifest_path)
+    if sources is None:
+        prepared, structure_input = load_structure_prediction_input(manifest_path)
+    else:
+        prepared = load_prepared_input(manifest_path).validate_resources(manifest_path)
+        structure_input = _structure_input_from_resources(prepared, sources[2])
+    # The native MSA now owns the needed representation; release publication text.
+    sources = None
     model = load_esmfold2_model(
         checkpoint,
         esmc_checkpoint=esmc_checkpoint,

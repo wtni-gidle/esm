@@ -14,9 +14,11 @@ from esm.esmfold2_wrapper.input import (
     write_prepared_input,
 )
 from esm.esmfold2_wrapper.msa_adapter import (
-    split_a3m_to_keyed_text,
-    validate_native_a3m,
-    validate_split_paired_depths,
+    _records_to_a3m,
+    _split_records_to_keyed_text,
+    _validate_paired_depths,
+    _validated_native_records,
+    parse_a3m_records,
 )
 
 
@@ -26,6 +28,8 @@ class _MSAResources:
     native: str | None = None
     paired: str | None = None
     unpaired: str | None = None
+    keyed: str | None = None
+    paired_depth: int | None = None
 
 
 def _canonical_text(text: str) -> str:
@@ -33,6 +37,11 @@ def _canonical_text(text: str) -> str:
 
 
 def _read_source(content: str | None, path: Path | None) -> str | None:
+    if path is not None and not path.is_absolute():
+        raise ValueError(
+            "MSA paths must be resolved before native conversion; call "
+            "validate_resources(manifest_path) first"
+        )
     return read_text_auto(path) if path is not None else content
 
 
@@ -59,21 +68,24 @@ def _load_and_validate_msa(entity: PreparedEntity) -> _MSAResources:
     if entity.msa_mode == "native":
         native = _read_source(entity.msa, entity.msa_path)
         assert native is not None
-        validate_native_a3m(a3m=native, query_sequence=entity.sequence)
-        return _MSAResources(mode="native", native=_canonical_text(native))
+        records = _validated_native_records(native, entity.sequence)
+        return _MSAResources(
+            mode="native", native=_canonical_text(native),
+            keyed=_records_to_a3m(list(records)),
+        )
 
     paired = _read_source(entity.paired_msa, entity.paired_msa_path)
     unpaired = _read_source(entity.unpaired_msa, entity.unpaired_msa_path)
     assert paired is not None and unpaired is not None
-    split_a3m_to_keyed_text(
-        paired_a3m=paired,
-        unpaired_a3m=unpaired,
-        query_sequence=entity.sequence,
-    )
+    paired_records = parse_a3m_records(paired, "pairedMsa")
+    unpaired_records = parse_a3m_records(unpaired, "unpairedMsa")
+    keyed = _split_records_to_keyed_text(paired_records, unpaired_records, entity.sequence)
     return _MSAResources(
         mode="split",
         paired=_canonical_text(paired),
         unpaired=_canonical_text(unpaired),
+        keyed=keyed,
+        paired_depth=len(paired_records),
     )
 
 
@@ -131,13 +143,18 @@ def _load_validated_sources(
     protein_entities = [
         entity for entity in resolved.sequences if entity.kind == "protein"
     ]
-    protein_resources = [_load_and_validate_msa(entity) for entity in protein_entities]
-    validate_split_paired_depths([
-        (entity.ids[0], resource.paired)
-        for entity, resource in zip(protein_entities, protein_resources, strict=True)
-        if resource.mode == "split" and resource.paired is not None
-    ])
+    protein_resources = _load_protein_resources(protein_entities)
     return prepared, protein_entities, protein_resources
+
+
+def _load_protein_resources(entities: list[PreparedEntity]) -> list[_MSAResources]:
+    resources = [_load_and_validate_msa(entity) for entity in entities]
+    _validate_paired_depths([
+        (entity.ids[0], resource.paired_depth)
+        for entity, resource in zip(entities, resources, strict=True)
+        if resource.paired_depth is not None
+    ])
+    return resources
 
 
 def validate_data_input(input_path: str | Path) -> None:
@@ -156,8 +173,20 @@ def prepare_data_bundle(
     existing fixed-name bundle is interrupted, rerun with write_input_json=True
     using the original source input to refresh it.
     """
+    return _publish_data_bundle(
+        _load_validated_sources(input_path), output_manifest_path,
+        compress_fold_input=compress_fold_input,
+    )
+
+
+def _publish_data_bundle(
+    sources: tuple[PreparedInput, list[PreparedEntity], list[_MSAResources]],
+    output_manifest_path: str | Path,
+    *, compress_fold_input: bool = False,
+) -> PreparedInput:
+    """Publish this invocation's validated sources without reading them again."""
     output_manifest = Path(output_manifest_path).expanduser().resolve()
-    prepared, protein_entities, protein_resources = _load_validated_sources(input_path)
+    prepared, protein_entities, protein_resources = sources
 
     suffix = ".zst" if compress_fold_input else ""
     resource_names: list[str] = []

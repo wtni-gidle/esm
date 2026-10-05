@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from esm.esmfold2_wrapper.compression import read_text_auto
+from esm.esmfold2_wrapper.data import _MSAResources, _load_protein_resources
 from esm.esmfold2_wrapper.input import PreparedEntity, PreparedInput, load_prepared_input
-from esm.esmfold2_wrapper.msa_adapter import (
-    native_a3m_to_esmfold2_msa,
-    split_a3m_to_esmfold2_msa,
-    validate_split_paired_depths,
-)
 
 if TYPE_CHECKING:
     from esm.models.esmfold2 import StructurePredictionInput
@@ -35,48 +31,20 @@ def _native_id(entity: PreparedEntity) -> str | list[str]:
     return entity.ids[0] if len(entity.ids) == 1 else list(entity.ids)
 
 
-def _read_declared_msa(content: str | None, path: Path | None) -> str:
-    if path is not None:
-        if not path.is_absolute():
-            raise ValueError(
-                "MSA paths must be resolved before native conversion; call "
-                "validate_resources(manifest_path) first"
-            )
-        return read_text_auto(path)
-    assert content is not None
-    return content
-
-
-def _protein_msa(entity: PreparedEntity):
-    assert entity.kind == "protein" and entity.sequence is not None
-    if entity.msa_mode == "none":
-        return None
-    if entity.msa_mode == "native":
-        return native_a3m_to_esmfold2_msa(
-            a3m=_read_declared_msa(entity.msa, entity.msa_path),
-            query_sequence=entity.sequence,
-        )
-    return split_a3m_to_esmfold2_msa(
-        paired_a3m=_read_declared_msa(entity.paired_msa, entity.paired_msa_path),
-        unpaired_a3m=_read_declared_msa(
-            entity.unpaired_msa, entity.unpaired_msa_path
-        ),
-        query_sequence=entity.sequence,
-    )
-
-
 def prepared_to_structure_prediction_input(
     prepared: PreparedInput,
 ) -> StructurePredictionInput:
-    """Convert a resolved manifest to ESMFold2's public SPI dataclasses."""
-    validate_split_paired_depths([
-        (
-            entity.ids[0],
-            _read_declared_msa(entity.paired_msa, entity.paired_msa_path),
-        )
-        for entity in prepared.sequences
-        if entity.kind == "protein" and entity.msa_mode == "split"
+    """Convert a resolved manifest, validating its MSA resources once."""
+    resources = _load_protein_resources([
+        entity for entity in prepared.sequences if entity.kind == "protein"
     ])
+    return _structure_input_from_resources(prepared, resources)
+
+
+def _structure_input_from_resources(
+    prepared: PreparedInput, resources: list[_MSAResources],
+) -> StructurePredictionInput:
+    """Consume the data stage's validated keyed text, without re-reading A3M."""
     from esm.models.esmfold2 import (
         DNAInput,
         LigandInput,
@@ -86,6 +54,7 @@ def prepared_to_structure_prediction_input(
         StructurePredictionInput,
     )
 
+    protein_resources = iter(resources)
     native_entities = []
     for entity in prepared.sequences:
         entity_id = _native_id(entity)
@@ -108,12 +77,18 @@ def prepared_to_structure_prediction_input(
             or None
         )
         if entity.kind == "protein":
+            resource = next(protein_resources)
+            msa = None
+            if resource.keyed is not None:
+                from esm.utils.msa import MSA
+
+                msa = MSA.from_a3m(StringIO(resource.keyed), remove_insertions=True)
             native_entities.append(
                 ProteinInput(
                     id=entity_id,
                     sequence=entity.sequence,
                     modifications=modifications,
-                    msa=_protein_msa(entity),
+                    msa=msa,
                 )
             )
         elif entity.kind == "rna":
@@ -142,18 +117,6 @@ def load_structure_prediction_input(
     path = Path(manifest_path).expanduser().resolve()
     prepared = load_prepared_input(path).validate_resources(path)
     return prepared, prepared_to_structure_prediction_input(prepared)
-
-
-def model_supports_msa(model: Any) -> bool:
-    """Return whether a loaded checkpoint consumes full MSA conditioning."""
-    config = getattr(model, "config", None)
-    msa_config = getattr(config, "msa_encoder", None)
-    enabled = bool(getattr(msa_config, "enabled", False))
-    if enabled and hasattr(model, "msa_encoder") and model.msa_encoder is None:
-        raise RuntimeError(
-            "Model config enables the MSA encoder, but the loaded model has none"
-        )
-    return enabled
 
 
 def _validate_loaded_model(model: Any) -> Any:
@@ -293,12 +256,6 @@ def _run_with_loaded_model(
         msa_max_depth=msa_max_depth,
         msa_column_mask_rate=msa_column_mask_rate,
     )
-    has_msa = any(entity.msa_mode != "none" for entity in prepared.sequences)
-    if has_msa and not model_supports_msa(model):
-        raise ValueError(
-            "The selected ESMFold2 checkpoint does not support MSA conditioning; "
-            "use a full ESMFold2 checkpoint or remove the MSA inputs"
-        )
     if builder is None:
         builder = _new_input_builder()
     raw = builder.fold(

@@ -31,6 +31,13 @@ def validate_split_paired_depths(
         (entity_id, len(parse_a3m_records(text, f"{entity_id}.pairedMsa")))
         for entity_id, text in components
     ]
+    _validate_paired_depths(depths)
+
+
+def _validate_paired_depths(depths: Sequence[tuple[str, int]]) -> None:
+    """Check already parsed paired channels without parsing them again."""
+    if len(depths) < 2:
+        return
     expected = depths[0][1]
     if any(depth != expected for _, depth in depths[1:]):
         detail = ", ".join(f"{entity_id}={depth}" for entity_id, depth in depths)
@@ -162,6 +169,15 @@ def split_a3m_to_keyed_text(
     """
     paired = parse_a3m_records(paired_a3m, "pairedMsa")
     unpaired = parse_a3m_records(unpaired_a3m, "unpairedMsa")
+    return _split_records_to_keyed_text(paired, unpaired, query_sequence)
+
+
+def _split_records_to_keyed_text(
+    paired: tuple[FastaEntry, ...],
+    unpaired: tuple[FastaEntry, ...],
+    query_sequence: str,
+) -> str:
+    """Validate and convert records already read by the data stage."""
     if not unpaired:
         raise PreparedMSAError("unpairedMsa must contain at least the query record")
     if paired:
@@ -212,17 +228,21 @@ def split_a3m_to_esmfold2_msa(
 
 def validate_native_a3m(*, a3m: str, query_sequence: str) -> None:
     """Validate the query and match-column width of a native keyed/standard A3M."""
+    _validated_native_records(a3m, query_sequence)
+
+
+def _validated_native_records(a3m: str, query_sequence: str) -> tuple[FastaEntry, ...]:
     records = parse_a3m_records(a3m, "msa")
     if not records:
         raise PreparedMSAError("msa must contain at least the query record")
     _validate_records(records, query_sequence, "msa")
     _validate_native_keys(records)
+    return records
 
 
 def native_a3m_to_esmfold2_msa(*, a3m: str, query_sequence: str) -> MSA:
     """Validate a native keyed/standard A3M and retain its deletion features."""
     from esm.utils.msa import MSA
 
-    records = parse_a3m_records(a3m, "msa")
-    validate_native_a3m(a3m=a3m, query_sequence=query_sequence)
+    records = _validated_native_records(a3m, query_sequence)
     return MSA.from_a3m(StringIO(_records_to_a3m(list(records))), remove_insertions=True)

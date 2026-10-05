@@ -1,3 +1,5 @@
+> EnsembleFold wrapper 的当前用法、输入输出及验证记录统一维护在[方法手册](../docs/usage/esmfold2.md)和[共同说明](../docs/usage/README.md)。旧 wrapper 专页已合并归档；下文原生项目说明保留其自身适用范围。
+
 <div align="center">
   <img src="_assets/header.png" style="width: 60%; height: auto;" />
 
@@ -181,9 +183,6 @@ For a tutorial on using SAEs using the Biohub Platform, see [here](https://githu
 ## ESMFold2
 <a name="esmfold2"></a>
 
-[EnsembleFold-compatible ESMFold2 wrapper](ESMFOLD2_WRAPPER.md) documents the
-versioned JSON input, Boltz-style paired/unpaired MSA adapter, optional input snapshots, and
-seed/sample output layout added for local batch prediction.
 
 
 [ESMFold2](https://huggingface.co/biohub/ESMFold2) is a state-of-the-art protein structure prediction model that combines ESMC (6B parameter) language model embeddings with a diffusion-based structure prediction architecture.

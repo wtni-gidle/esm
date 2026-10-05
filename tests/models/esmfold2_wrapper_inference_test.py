@@ -9,7 +9,6 @@ import esm.esmfold2_wrapper.inference as inference_module
 from esm.esmfold2_wrapper.inference import (
     load_esmfold2_model,
     load_structure_prediction_input,
-    model_supports_msa,
     run_esmfold2_inference,
 )
 from esm.esmfold2_wrapper.input import PreparedInputError
@@ -77,21 +76,6 @@ def test_split_components_become_one_native_msa(tmp_path):
     ]
     assert msa.sequences == ["ACDE", "AC-E", "ACDE"]
     assert msa.deletions[2, 2] == 1
-
-
-@pytest.mark.parametrize(
-    "enabled,disabled,expected",
-    [(True, False, True), (False, False, False), (True, True, True)],
-)
-def test_model_msa_capability_comes_from_config(enabled, disabled, expected):
-    model = SimpleNamespace(
-        config=SimpleNamespace(
-            msa_encoder=SimpleNamespace(enabled=enabled),
-            disable_msa_features=disabled,
-        ),
-        msa_encoder=object() if enabled else None,
-    )
-    assert model_supports_msa(model) is expected
 
 
 def test_experimental_checkpoint_is_rejected_before_inference():
@@ -195,7 +179,7 @@ def test_inference_passes_public_fold_options_and_normalizes_results(
     assert run.results == tuple(sentinels)
 
 
-def test_fast_like_checkpoint_rejects_declared_msa_before_builder(
+def test_fast_like_checkpoint_passes_declared_msa_to_native_builder(
     tmp_path, monkeypatch
 ):
     manifest = tmp_path / "target_data.json"
@@ -215,14 +199,20 @@ def test_fast_like_checkpoint_rejects_declared_msa_before_builder(
     monkeypatch.setattr(
         inference_module, "load_esmfold2_model", lambda *args, **kwargs: model
     )
-    monkeypatch.setattr(
-        inference_module,
-        "_new_input_builder",
-        lambda: pytest.fail("builder must not be created"),
-    )
+    calls = []
+    result = object()
 
-    with pytest.raises(ValueError, match="does not support MSA"):
-        run_esmfold2_inference(manifest)
+    class Builder:
+        def fold(self, loaded_model, structure_input, **kwargs):
+            calls.append((loaded_model, structure_input))
+            return [result]
+
+    monkeypatch.setattr(inference_module, "_new_input_builder", Builder)
+
+    run = run_esmfold2_inference(manifest, num_diffusion_samples=1)
+    assert run.results == (result,)
+    assert calls[0][0] is model
+    assert calls[0][1].sequences[0].msa.sequences == ["ACDE"]
 
 
 def test_inference_only_revalidates_cross_entity_paired_depth(tmp_path):
