@@ -78,7 +78,8 @@ def _pair_bias_kernel(
     pid_q = tl.program_id(1)
     pid_bh = tl.program_id(2)
     NUM_HEAD_BLKS: tl.constexpr = (NUM_HEADS + HEADS_PER_BLK - 1) // HEADS_PER_BLK
-    pid_b = pid_bh // NUM_HEAD_BLKS
+    # Promote before multiplication: long multi-sample inputs exceed int32 offsets.
+    pid_b = (pid_bh // NUM_HEAD_BLKS).to(tl.int64)
     pid_hblk = pid_bh % NUM_HEAD_BLKS
 
     offs_k = pid_k * TILE_K + tl.arange(0, TILE_K)
