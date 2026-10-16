@@ -8,8 +8,12 @@ usage() {
     echo "  -i  Input JSON or prepared <name>_data.json."
     echo "  -o  Output root directory."
     echo ""
+    echo "Shared long options: --input --output-dir --config --gpu-device"
+    echo "  --run-data-pipeline --run-inference --model-seeds --help"
+    echo ""
     echo "Options:"
-    echo "  -d  Single visible CUDA device ID. (default: 0)"
+    echo "  -y, --config  Flat inference YAML (present keys override CLI)."
+    echo "  -d  Single visible CUDA device ID. (default: CUDA_VISIBLE_DEVICES or 0)"
     echo "  -D  Validate/organize existing inputs, no search: true/false. (default: true)"
     echo "  -P  Run inference: true/false. (default: true)"
     echo "  -J  Write/update input JSON and MSA snapshot: true/false. (default: true)"
@@ -43,8 +47,27 @@ normalize_boolean() {
     esac
 }
 
-while getopts "i:o:d:D:P:J:z:f:r:n:c:p:k:m:E:S:h" option; do
+# Normalize the shared long options, then keep the established getopts parser.
+normalized_args=()
+while (( $# )); do
+    case "$1" in
+        --input) normalized_args+=(-i) ;;
+        --output-dir) normalized_args+=(-o) ;;
+        --config) normalized_args+=(-y) ;;
+        --gpu-device) normalized_args+=(-d) ;;
+        --run-data-pipeline) normalized_args+=(-D) ;;
+        --run-inference) normalized_args+=(-P) ;;
+        --model-seeds) normalized_args+=(-r) ;;
+        --help) normalized_args+=(-h) ;;
+        *) normalized_args+=("$1") ;;
+    esac
+    shift
+done
+set -- "${normalized_args[@]}"
+
+while getopts "y:i:o:d:D:P:J:z:f:r:n:c:p:k:m:E:S:h" option; do
     case "$option" in
+        y) config=$OPTARG ;;
         i) input_path=$OPTARG ;;
         o) output_dir=$OPTARG ;;
         d) gpu_device=$OPTARG ;;
@@ -122,6 +145,9 @@ command_args=(
     --include-embeddings "$include_embeddings"
     --skip "$skip"
 )
+if [[ "${config:-}" != "" ]]; then
+    command_args+=(--config "$config")
+fi
 if [[ "${model_seeds:-}" != "" ]]; then
     command_args+=(--seeds "$model_seeds")
 fi

@@ -44,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or provide native/split MSA input in the JSON."
         ),
     )
+    predict.add_argument("-y", "--config", type=Path, help="Flat inference YAML; present keys override CLI values.")
     predict.add_argument("-i", "--input", type=Path, required=True)
     predict.add_argument("-o", "--output-dir", type=Path, required=True)
     predict.add_argument(
@@ -142,10 +143,58 @@ def _predict(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     return 0
 
 
+def override_flags_with_config(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Apply only explicitly supplied YAML keys, using the CLI's converters."""
+    if args.config is None:
+        return
+    import yaml
+
+    names = {
+        "write_input_json": "write_input_json", "compress_fold_input": "compress_fold_input",
+        "compress_full_confidence": "compress_full_confidence", "skip": "skip",
+        "num_diffusion_samples": "diffusion_samples", "num_diffusion_steps": "sampling_steps",
+        "num_loops": "loops", "checkpoint": "checkpoint", "esmc_checkpoint": "esmc_checkpoint",
+        "dtype": "dtype", "esmc_precision": "esmc_precision", "kernel_backend": "kernel_backend",
+        "include_embeddings": "include_embeddings",
+    }
+    predict = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices["predict"]
+    actions = {a.dest: a for a in predict._actions}
+    try:
+        with args.config.open() as handle:
+            config = yaml.safe_load(handle)
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise ValueError("config must be a flat YAML mapping")
+        for key, value in config.items():
+            if key not in names:
+                raise ValueError(f"unsupported config key: {key}")
+            action = actions[names[key]]
+            expected = bool if action.type is _boolean else int if action.type is int else str
+            if type(value) is not expected:
+                raise ValueError(f"config {key} must be {expected.__name__}")
+            if key in {"checkpoint", "esmc_checkpoint"}:
+                path = Path(value).expanduser()
+                # Bare org/model identifiers remain Hugging Face IDs. Use ./ to
+                # disambiguate a local path with that same spelling.
+                is_hub_id = (key == "checkpoint" and re.fullmatch(r"[\w.-]+/[\w.-]+", value)
+                             and not value.startswith(".") and not (args.config.parent / path).exists())
+                if not is_hub_id:
+                    value = str((args.config.resolve().parent / path).resolve())
+            converted = action.type(str(value)) if action.type else value
+            if action.choices and converted not in action.choices:
+                raise ValueError(f"config {key}: invalid choice {value!r}; choose from {action.choices}")
+            setattr(args, action.dest, converted)
+            print(f"Config override: {key}={converted}")
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        parser.error(str(error))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Parse arguments and execute the selected wrapper command."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    override_flags_with_config(args, parser)
     if args.command == "predict":
         return _predict(args, parser)
     parser.error(f"Unknown command: {args.command}")
