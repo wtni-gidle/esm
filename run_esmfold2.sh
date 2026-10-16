@@ -130,7 +130,7 @@ if ! command -v "$python_bin" >/dev/null 2>&1; then
 fi
 
 command_args=(
-    -m esm.esmfold2_wrapper predict
+    -m esm.esmfold2 predict
     --input "$input_path"
     --output-dir "$output_dir"
     --write-input-json "$write_input_json"

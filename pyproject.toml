@@ -56,7 +56,7 @@ dependencies = [
 ]
 
 [project.scripts]
-esmfold2-wrapper = "esm.esmfold2_wrapper.cli:main"
+esmfold2 = "esm.esmfold2.cli:main"
 
 [project.optional-dependencies]
 # ESMFold2 "fused" kernel backend (set_kernel_backend("fused"))

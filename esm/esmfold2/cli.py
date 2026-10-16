@@ -1,4 +1,4 @@
-"""Command-line entry point for the first-layer ESMFold2 wrapper."""
+"""Command-line entry point for ESMFold2 prediction."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from esm.esmfold2_wrapper.inference import DEFAULT_CHECKPOINT
-from esm.esmfold2_wrapper.workflow import run_prepared_workflow
+from esm.esmfold2.inference import DEFAULT_CHECKPOINT
+from esm.esmfold2.workflow import run_prepared_workflow
 
 _CUDA_DEVICE = re.compile(r"^cuda(?::[0-9]+)?$")
 
@@ -33,13 +33,13 @@ def _device(value: str) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the parser without importing Torch or model implementations."""
-    parser = argparse.ArgumentParser(prog="esmfold2-wrapper")
+    parser = argparse.ArgumentParser(prog="esmfold2")
     subparsers = parser.add_subparsers(dest="command", required=True)
     predict = subparsers.add_parser(
         "predict",
         help="Validate existing input and/or run ESMFold2, optionally saving input.",
         description=(
-            "Run the EnsembleFold-compatible ESMFold2 wrapper. This wrapper "
+            "Run ESMFold2 prediction. This command "
             "does not search for MSAs; omit MSA fields for query-only inference "
             "or provide native/split MSA input in the JSON."
         ),
@@ -191,7 +191,7 @@ def override_flags_with_config(args: argparse.Namespace, parser: argparse.Argume
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Parse arguments and execute the selected wrapper command."""
+    """Parse arguments and execute the selected prediction command."""
     parser = build_parser()
     args = parser.parse_args(argv)
     override_flags_with_config(args, parser)

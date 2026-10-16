@@ -1,3 +1,5 @@
+本地预测入口：`python -m esm.esmfold2 predict --help`；安装后也可使用 `esmfold2 predict`。
+
 > EnsembleFold wrapper 的当前用法、输入输出及验证记录统一维护在[方法手册](../docs/usage/esmfold2.md)和[共同说明](../docs/usage/README.md)。旧 wrapper 专页已合并归档；下文原生项目说明保留其自身适用范围。
 
 <div align="center">

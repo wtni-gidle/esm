@@ -11,8 +11,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from esm.esmfold2_wrapper import data, inference, msa_adapter, outputs
-from esm.esmfold2_wrapper.workflow import run_prepared_workflow
+from esm.esmfold2 import data, inference, msa_adapter, outputs
+from esm.esmfold2.workflow import run_prepared_workflow
 
 
 @pytest.fixture
@@ -127,8 +127,8 @@ def test_reuse_keeps_input_checks_before_publication(
 
 
 def test_direct_conversion_still_requires_resolved_paths(tmp_path):
-    from esm.esmfold2_wrapper.input import PreparedInput
-    from esm.esmfold2_wrapper.inference import prepared_to_structure_prediction_input
+    from esm.esmfold2.input import PreparedInput
+    from esm.esmfold2.inference import prepared_to_structure_prediction_input
 
     prepared = PreparedInput.from_dict({"version": 1, "name": "target", "sequences": [
         {"type": "protein", "id": "A", "sequence": "ACDE", "msaPath": "relative.a3m"}

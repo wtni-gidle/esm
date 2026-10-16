@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-import esm.esmfold2_wrapper.inference as inference_module
-from esm.esmfold2_wrapper.inference import (
+import esm.esmfold2.inference as inference_module
+from esm.esmfold2.inference import (
     load_esmfold2_model,
     load_structure_prediction_input,
     run_esmfold2_inference,
 )
-from esm.esmfold2_wrapper.input import PreparedInputError
+from esm.esmfold2.input import PreparedInputError
 
 
 def write_manifest(path, sequences):

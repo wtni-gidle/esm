@@ -12,9 +12,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from esm.esmfold2_wrapper import inference
-from esm.esmfold2_wrapper.compression import read_text_auto, write_zstd_text
-from esm.esmfold2_wrapper.workflow import run_prepared_workflow
+from esm.esmfold2 import inference
+from esm.esmfold2.compression import read_text_auto, write_zstd_text
+from esm.esmfold2.workflow import run_prepared_workflow
 from esm.models.esmfold2.paired_msa import protein_letter_to_res_type
 from esm.models.esmfold2.prepare_input import ChainInfo, TokenInfo, compute_msa_features
 from tests.models.esmfold2_wrapper_workflow_test import fake_result

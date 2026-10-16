@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from esm.esmfold2_wrapper.msa_adapter import split_a3m_to_esmfold2_msa
+from esm.esmfold2.msa_adapter import split_a3m_to_esmfold2_msa
 from esm.models.esmfold2.paired_msa import construct_paired_msa
 
 

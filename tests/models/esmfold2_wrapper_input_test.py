@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from esm.esmfold2_wrapper.input import (
+from esm.esmfold2.input import (
     PreparedInput,
     PreparedInputError,
     load_prepared_input,

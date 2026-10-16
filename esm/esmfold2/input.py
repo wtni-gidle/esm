@@ -1,4 +1,4 @@
-"""Versioned JSON contract for the EnsembleFold ESMFold2 wrapper.
+"""Versioned JSON contract for the EnsembleFold-compatible ESMFold2 inputs.
 
 This module deliberately lives outside :mod:`esm.models.esmfold2` so input
 work does not import Torch or initialize any model-side resources.
@@ -41,7 +41,7 @@ MSAMode = Literal["none", "native", "split"]
 
 
 class PreparedInputError(ValueError):
-    """Raised when wrapper input does not satisfy the public contract."""
+    """Raised when prediction input does not satisfy the public contract."""
 
 
 def _expect_mapping(value: Any, location: str) -> Mapping[str, Any]:
@@ -452,7 +452,7 @@ class PreparedInput:
 
 
 def load_prepared_input(path: str | Path) -> PreparedInput:
-    """Read and validate one wrapper manifest without loading model resources."""
+    """Read and validate one input manifest without loading model resources."""
     source = Path(path).expanduser()
     try:
         with source.open("r", encoding="utf-8") as handle:

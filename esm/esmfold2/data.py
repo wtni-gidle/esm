@@ -6,14 +6,14 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from esm.esmfold2_wrapper.compression import read_text_auto, write_zstd_text
-from esm.esmfold2_wrapper.input import (
+from esm.esmfold2.compression import read_text_auto, write_zstd_text
+from esm.esmfold2.input import (
     PreparedEntity,
     PreparedInput,
     load_prepared_input,
     write_prepared_input,
 )
-from esm.esmfold2_wrapper.msa_adapter import (
+from esm.esmfold2.msa_adapter import (
     _records_to_a3m,
     _split_records_to_keyed_text,
     _validate_paired_depths,

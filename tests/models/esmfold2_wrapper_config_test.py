@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from esm.esmfold2_wrapper import cli
+from esm.esmfold2 import cli
 
 
 def test_config_false_overrides_cli_in_actual_workflow(tmp_path):

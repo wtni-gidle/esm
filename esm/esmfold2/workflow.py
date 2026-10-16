@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from esm.esmfold2_wrapper.input import (
+from esm.esmfold2.input import (
     PreparedInput,
     PreparedInputError,
     load_prepared_input,
@@ -36,7 +36,7 @@ class WorkflowPlan:
 
 @dataclass(frozen=True)
 class WorkflowResult:
-    """Published resources and predictions from one wrapper invocation."""
+    """Published resources and predictions from one prediction invocation."""
 
     prepared_path: Path
     seeds: tuple[int, ...]
@@ -96,7 +96,7 @@ def build_workflow_plan(
     if not source.is_file():
         raise FileNotFoundError(f"Input path does not exist or is not a file: {source}")
     if source.suffix.lower() != ".json":
-        raise PreparedInputError("The wrapper expects a JSON input.")
+        raise PreparedInputError("ESMFold2 expects a JSON input.")
 
     output_root = Path(output_dir).expanduser().resolve()
     prepared = load_prepared_input(source)
@@ -162,7 +162,7 @@ def run_prepared_workflow(
     )
     normalized_seeds: tuple[int, ...] = ()
     if plan.run_inference:
-        from esm.esmfold2_wrapper.inference import (
+        from esm.esmfold2.inference import (
             _validate_fold_options,
             _validate_model_options,
         )
@@ -187,7 +187,7 @@ def run_prepared_workflow(
     manifest_path = plan.input_path
     sources = None
     if plan.write_input_json or plan.run_data_pipeline:
-        from esm.esmfold2_wrapper.data import _load_validated_sources, _publish_data_bundle
+        from esm.esmfold2.data import _load_validated_sources, _publish_data_bundle
 
         sources = _load_validated_sources(plan.input_path)
         if plan.write_input_json:
@@ -198,14 +198,14 @@ def run_prepared_workflow(
     if not plan.run_inference:
         return WorkflowResult(prepared_path=manifest_path, seeds=(), prediction_paths=())
 
-    from esm.esmfold2_wrapper.inference import (
+    from esm.esmfold2.inference import (
         _new_input_builder,
         _run_with_loaded_model,
         _structure_input_from_resources,
         load_esmfold2_model,
         load_structure_prediction_input,
     )
-    from esm.esmfold2_wrapper.outputs import (
+    from esm.esmfold2.outputs import (
         expected_seed_samples,
         publish_inference_results,
         seed_outputs_complete,

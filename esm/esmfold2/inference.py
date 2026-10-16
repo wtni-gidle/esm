@@ -8,8 +8,8 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from esm.esmfold2_wrapper.data import _MSAResources, _load_protein_resources
-from esm.esmfold2_wrapper.input import PreparedEntity, PreparedInput, load_prepared_input
+from esm.esmfold2.data import _MSAResources, _load_protein_resources
+from esm.esmfold2.input import PreparedEntity, PreparedInput, load_prepared_input
 
 if TYPE_CHECKING:
     from esm.models.esmfold2 import StructurePredictionInput
@@ -123,7 +123,7 @@ def _validate_loaded_model(model: Any) -> Any:
     """Reject native architectures that cannot satisfy the output contract."""
     if getattr(getattr(model, "config", None), "type", None) == "experimental":
         raise ValueError(
-            "Experimental ESMFold2 checkpoints are not supported by this wrapper "
+            "Experimental ESMFold2 checkpoints are not supported by this prediction workflow "
             "because they do not produce the required PDE output"
         )
     return model

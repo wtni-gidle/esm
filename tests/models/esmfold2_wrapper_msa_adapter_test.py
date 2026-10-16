@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from esm.esmfold2_wrapper.msa_adapter import (
+from esm.esmfold2.msa_adapter import (
     PreparedMSAError,
     native_a3m_to_esmfold2_msa,
     split_a3m_to_esmfold2_msa,

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from esm.esmfold2_wrapper import cli
+from esm.esmfold2 import cli
 
 
 def write_input(path):
@@ -126,7 +126,7 @@ def test_all_skipped_cli_writes_requested_snapshot_without_importing_torch(tmp_p
         "--write_input_json", "true",
         "-r", "7", "-n", "1", "-S", "true",
     ]
-    from esm.esmfold2_wrapper.outputs import expected_seed_samples
+    from esm.esmfold2.outputs import expected_seed_samples
 
     sample = expected_seed_samples(output_dir / "target", seed=7, sample_count=1)[0]
     for path in (sample.model_path, sample.summary_path, sample.plddt_path,
@@ -135,7 +135,7 @@ def test_all_skipped_cli_writes_requested_snapshot_without_importing_torch(tmp_p
         path.write_text("nonempty; skip must not parse this")
     program = (
         "import sys; "
-        "from esm.esmfold2_wrapper.cli import main; "
+        "from esm.esmfold2.cli import main; "
         f"code = main({arguments!r}); "
         "assert code == 0; "
         "assert 'torch' not in sys.modules"
@@ -233,7 +233,7 @@ def test_shell_preserves_argument_boundaries_and_sets_one_visible_gpu(tmp_path):
     )
 
     arguments = captured_args.read_text().splitlines()
-    assert arguments[:3] == ["-m", "esm.esmfold2_wrapper", "predict"]
+    assert arguments[:3] == ["-m", "esm.esmfold2", "predict"]
     assert arguments[arguments.index("--input") + 1] == str(source)
     assert arguments[arguments.index("--output-dir") + 1] == str(output_dir)
     assert arguments[arguments.index("--seeds") + 1] == "7,9"
@@ -297,7 +297,7 @@ def test_data_only_cli_does_not_import_torch(tmp_path):
     write_input(source)
     args = ["predict", "-i", str(source), "-o", str(tmp_path / "out"),
             "-D", "true", "-P", "false", "-J", "true"]
-    program = ("import sys; from esm.esmfold2_wrapper.cli import main; "
+    program = ("import sys; from esm.esmfold2.cli import main; "
                f"assert main({args!r}) == 0; assert 'torch' not in sys.modules")
     result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True,
                             env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[2])})
@@ -310,6 +310,6 @@ def test_console_script_points_at_lightweight_cli():
     with (root / "pyproject.toml").open("rb") as handle:
         project = tomllib.load(handle)["project"]
 
-    assert project["scripts"]["esmfold2-wrapper"] == (
-        "esm.esmfold2_wrapper.cli:main"
+    assert project["scripts"]["esmfold2"] == (
+        "esm.esmfold2.cli:main"
     )

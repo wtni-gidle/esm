@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import esm.esmfold2_wrapper.inference as inference_module
-from esm.esmfold2_wrapper.outputs import expected_seed_samples
-from esm.esmfold2_wrapper.compression import read_text_auto
-from esm.esmfold2_wrapper.workflow import (
+import esm.esmfold2.inference as inference_module
+from esm.esmfold2.outputs import expected_seed_samples
+from esm.esmfold2.compression import read_text_auto
+from esm.esmfold2.workflow import (
     build_workflow_plan,
     normalize_seeds,
     run_prepared_workflow,
@@ -160,7 +160,7 @@ def test_normalize_seeds_rejects_invalid_values(value):
 
 def test_normalize_seeds_generates_one_concrete_uint32(monkeypatch):
     monkeypatch.setattr(
-        "esm.esmfold2_wrapper.workflow.secrets.randbelow", lambda limit: limit - 1
+        "esm.esmfold2.workflow.secrets.randbelow", lambda limit: limit - 1
     )
     assert normalize_seeds(None) == (2**32 - 1,)
 

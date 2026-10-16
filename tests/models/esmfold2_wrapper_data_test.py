@@ -7,9 +7,9 @@ import lzma
 import pytest
 import zstandard as zstd
 
-from esm.esmfold2_wrapper.compression import read_text_auto, write_zstd_text
-from esm.esmfold2_wrapper.data import prepare_data_bundle
-from esm.esmfold2_wrapper.input import load_prepared_input
+from esm.esmfold2.compression import read_text_auto, write_zstd_text
+from esm.esmfold2.data import prepare_data_bundle
+from esm.esmfold2.input import load_prepared_input
 
 
 def write_manifest(path, sequences, name="target"):

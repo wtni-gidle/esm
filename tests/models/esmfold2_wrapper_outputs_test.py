@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from esm.esmfold2_wrapper.outputs import (
+from esm.esmfold2.outputs import (
     PredictionOutputError,
     expected_embedding_path,
     expected_seed_samples,

@@ -6,11 +6,11 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import numpy as np
 import pytest
 
-from esm.esmfold2_wrapper import cli, inference
-from esm.esmfold2_wrapper.compression import read_text_auto
-from esm.esmfold2_wrapper.data import prepare_data_bundle
-from esm.esmfold2_wrapper.input import load_prepared_input
-from esm.esmfold2_wrapper.outputs import publish_inference_results, seed_outputs_complete
+from esm.esmfold2 import cli, inference
+from esm.esmfold2.compression import read_text_auto
+from esm.esmfold2.data import prepare_data_bundle
+from esm.esmfold2.input import load_prepared_input
+from esm.esmfold2.outputs import publish_inference_results, seed_outputs_complete
 
 
 def _source(tmp_path, mode):
